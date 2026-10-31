@@ -2,6 +2,8 @@ package com.app.eventmanagmentsystem;
 
 import com.app.eventmanagmentsystem.exceptions.EventAccessDeniedException;
 import com.app.eventmanagmentsystem.exceptions.InvalidQrTokenException;
+import com.app.eventmanagmentsystem.exceptions.InvalidRequestException;
+import com.app.eventmanagmentsystem.exceptions.PassAlreadyActivatedException;
 import com.app.eventmanagmentsystem.exceptions.PassAlreadyCheckedInException;
 import com.app.eventmanagmentsystem.exceptions.PassNotActivatedException;
 import com.app.eventmanagmentsystem.exceptions.PassNotValidForDayException;
@@ -16,6 +18,7 @@ import com.app.eventmanagmentsystem.model.User;
 import com.app.eventmanagmentsystem.model.enums.ActivationPolicy;
 import com.app.eventmanagmentsystem.model.enums.CheckInPolicy;
 import com.app.eventmanagmentsystem.model.enums.EventStatus;
+import com.app.eventmanagmentsystem.model.enums.PassCategory;
 import com.app.eventmanagmentsystem.model.enums.PassStatus;
 import com.app.eventmanagmentsystem.payload.checkin.CheckInRequest;
 import com.app.eventmanagmentsystem.payload.checkin.CheckInResponse;
@@ -24,6 +27,7 @@ import com.app.eventmanagmentsystem.payload.pass.ActivatePassRequest;
 import com.app.eventmanagmentsystem.payload.pass.GeneratePassRequest;
 import com.app.eventmanagmentsystem.payload.pass.PassResponse;
 import com.app.eventmanagmentsystem.payload.pass.ValidatePassResponse;
+import com.app.eventmanagmentsystem.repository.AttendeeRepository;
 import com.app.eventmanagmentsystem.repository.EventDayRepository;
 import com.app.eventmanagmentsystem.repository.EventGatekeeperRepository;
 import com.app.eventmanagmentsystem.repository.EventPassRepository;
@@ -68,6 +72,9 @@ class QrScanningAndVerificationTest {
 
         @Autowired
         private EventPassRepository passRepository;
+
+        @Autowired
+        private AttendeeRepository attendeeRepository;
 
         @Autowired
         private UserRepository userRepository;
@@ -346,5 +353,115 @@ class QrScanningAndVerificationTest {
 
                 assertThatThrownBy(() -> checkInService.performCheckIn(req))
                                 .isInstanceOf(PassRevokedException.class);
+        }
+
+        @Test
+        @DisplayName("Public Activation: STUDENT pass displays student requirements and validates fields")
+        void testStudentPassValidationAndPublicActivation() {
+                authenticateAs(gatekeeperUser);
+
+                GeneratePassRequest genReq = new GeneratePassRequest();
+                genReq.setEventId(event.getId());
+                genReq.setBatchSize(1);
+                genReq.setCategory(PassCategory.STUDENT);
+                PassResponse pass = passGenerationService.generatePasses(genReq).get(0);
+
+                // Clear authentication to simulate unauthenticated public visitor
+                SecurityContextHolder.clearContext();
+
+                // 1. Visitor validates pass
+                ValidatePassResponse validateRes = passActivationService.validatePass(pass.getPassNumber());
+                assertThat(validateRes.isValid()).isTrue();
+                assertThat(validateRes.getCategory()).isEqualTo(PassCategory.STUDENT);
+                assertThat(validateRes.isEligibleForActivation()).isTrue();
+                assertThat(validateRes.isEligibleForActivationProperty()).isTrue();
+                assertThat(validateRes.getStatus()).isEqualTo(PassStatus.NOT_ACTIVATED);
+
+                // 2. Submission without college throws InvalidRequestException
+                ActivatePassRequest invalidReq = new ActivatePassRequest();
+                invalidReq.setEventId(event.getId());
+                invalidReq.setRawToken(pass.getPassNumber());
+                invalidReq.setAttendeeFullName("Student John");
+                invalidReq.setAttendeeEmail("john.student@university.edu");
+
+                assertThatThrownBy(() -> passActivationService.activatePass(invalidReq))
+                                .isInstanceOf(InvalidRequestException.class)
+                                .hasMessageContaining("College or institution is required");
+
+                // 3. Valid submission succeeds publicly without login
+                ActivatePassRequest validReq = new ActivatePassRequest();
+                validReq.setEventId(event.getId());
+                validReq.setRawToken(pass.getPassNumber());
+                validReq.setAttendeeFullName("Student John");
+                validReq.setAttendeeEmail("john.student@university.edu");
+                validReq.setAttendeeCollege("Stanford University");
+                validReq.setAttendeeCourse("B.S. Software Engineering");
+                validReq.setAttendeeYearSemester("3rd Year");
+                validReq.setAttendeeStudentId("STAN-2026-99");
+
+                PassResponse activated = passActivationService.activatePass(validReq);
+                assertThat(activated.getStatus()).isEqualTo(PassStatus.ACTIVATED);
+                assertThat(activated.getAttendeeName()).isEqualTo("Student John");
+
+                var savedAttendee = attendeeRepository.findByEventIdAndEmail(event.getId(), "john.student@university.edu").orElseThrow();
+                assertThat(savedAttendee.getCollege()).isEqualTo("Stanford University");
+                assertThat(savedAttendee.getCourse()).isEqualTo("B.S. Software Engineering");
+
+                // 4. Repeated validation shows already activated
+                ValidatePassResponse secondValidate = passActivationService.validatePass(pass.getPassNumber());
+                assertThat(secondValidate.isValid()).isTrue();
+                assertThat(secondValidate.isEligibleForActivation()).isFalse();
+                assertThat(secondValidate.isEligibleForActivationProperty()).isFalse();
+
+                // 5. Repeated activation throws PassAlreadyActivatedException
+                assertThatThrownBy(() -> passActivationService.activatePass(validReq))
+                                .isInstanceOf(PassAlreadyActivatedException.class);
+        }
+
+        @Test
+        @DisplayName("Public Activation: OTHER pass validates and activates without student fields")
+        void testOtherPassValidationAndPublicActivation() {
+                authenticateAs(gatekeeperUser);
+
+                GeneratePassRequest genReq = new GeneratePassRequest();
+                genReq.setEventId(event.getId());
+                genReq.setBatchSize(1);
+                genReq.setCategory(PassCategory.OTHER);
+                PassResponse pass = passGenerationService.generatePasses(genReq).get(0);
+
+                // Unauthenticated visitor
+                SecurityContextHolder.clearContext();
+
+                ValidatePassResponse validateRes = passActivationService.validatePass(pass.getPassNumber());
+                assertThat(validateRes.isValid()).isTrue();
+                assertThat(validateRes.getCategory()).isEqualTo(PassCategory.OTHER);
+                assertThat(validateRes.isEligibleForActivation()).isTrue();
+                assertThat(validateRes.isEligibleForActivationProperty()).isTrue();
+
+                // Activate with company and designation (no student fields)
+                ActivatePassRequest actReq = new ActivatePassRequest();
+                actReq.setEventId(event.getId());
+                actReq.setRawToken(pass.getPassNumber());
+                actReq.setAttendeeFullName("Professional Jane");
+                actReq.setAttendeeEmail("jane.pro@corporate.com");
+                actReq.setAttendeeOrganization("Tech Corp");
+                actReq.setAttendeeDesignation("Lead Architect");
+
+                PassResponse activated = passActivationService.activatePass(actReq);
+                assertThat(activated.getStatus()).isEqualTo(PassStatus.ACTIVATED);
+                assertThat(activated.getAttendeeName()).isEqualTo("Professional Jane");
+
+                var savedAttendee = attendeeRepository.findByEventIdAndEmail(event.getId(), "jane.pro@corporate.com").orElseThrow();
+                assertThat(savedAttendee.getOrganization()).isEqualTo("Tech Corp");
+                assertThat(savedAttendee.getDesignation()).isEqualTo("Lead Architect");
+        }
+
+        @Test
+        @DisplayName("Public Activation: invalid pass token throws InvalidQrTokenException")
+        void testInvalidTokenRejection() {
+                SecurityContextHolder.clearContext();
+
+                assertThatThrownBy(() -> passActivationService.validatePass("TOTALLY-INVALID-TOKEN-999"))
+                                .isInstanceOf(InvalidQrTokenException.class);
         }
 }

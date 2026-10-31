@@ -1,7 +1,9 @@
 package com.app.eventmanagmentsystem.payload.pass;
 
+import com.app.eventmanagmentsystem.model.enums.PassCategory;
 import com.app.eventmanagmentsystem.model.enums.PassStatus;
 import com.app.eventmanagmentsystem.payload.event.EventDayResponse;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -15,7 +17,7 @@ public class ValidatePassResponse {
     private final boolean valid;
     private final UUID passId;
     private final String passNumber;
-    private final com.app.eventmanagmentsystem.model.enums.PassCategory category;
+    private final PassCategory category;
     private final PassStatus status;
     private final UUID eventId;
     private final String eventName;
@@ -24,9 +26,17 @@ public class ValidatePassResponse {
     private final Instant startsAt;
     private final Instant endsAt;
     private final List<EventDayResponse> validDays;
+
+    @JsonProperty("isEligibleForActivation")
     private final boolean isEligibleForActivation;
+
     private final String message;
     private final String attendeeName;
     private final String attendeeEmail;
+
+    @JsonProperty("eligibleForActivation")
+    public boolean isEligibleForActivationProperty() {
+        return isEligibleForActivation;
+    }
 }
 
