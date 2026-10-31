@@ -70,5 +70,11 @@ public interface EventPassRepository extends JpaRepository<EventPass, UUID>, Jpa
     Optional<EventPass> findByAttendeeId(UUID attendeeId);
 
     List<EventPass> findByAttendeeIdIn(java.util.Collection<UUID> attendeeIds);
+
+    @Query("SELECT COUNT(p) FROM EventPass p WHERE p.attendee IS NOT NULL")
+    long countWithAttendee();
+
+    @Query("SELECT COUNT(p) FROM EventPass p WHERE p.event.id = :eventId AND p.attendee IS NOT NULL")
+    long countWithAttendeeByEventId(@Param("eventId") UUID eventId);
 }
 

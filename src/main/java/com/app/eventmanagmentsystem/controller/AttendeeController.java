@@ -37,9 +37,10 @@ public class AttendeeController {
             @Parameter(description = "Search query by name, email, mobile, or org") @RequestParam(required = false) String search,
             @Parameter(description = "Filter by registration status") @RequestParam(required = false) RegistrationStatus status,
             @Parameter(description = "Filter by check-in state (CHECKED_IN / NOT_CHECKED_IN)") @RequestParam(required = false) String checkInStatus,
+            @Parameter(description = "Filter by pass assignment status") @RequestParam(required = false) Boolean hasPass,
             @PageableDefault(size = 20, sort = "registeredAt") Pageable pageable) {
 
-        Page<AttendeeResponse> response = attendeeService.getAttendees(eventId, search, status, checkInStatus, pageable);
+        Page<AttendeeResponse> response = attendeeService.getAttendees(eventId, search, status, checkInStatus, hasPass, pageable);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -74,6 +75,13 @@ public class AttendeeController {
             @Parameter(description = "Attendee UUID") @PathVariable UUID id) {
         attendeeService.deleteAttendee(id);
         return ResponseEntity.ok(ApiResponse.success("Attendee registration cancelled successfully"));
+    }
+
+    @Operation(summary = "Get attendee statistics", description = "Returns attendee statistics globally or filtered by eventId. Requires ATTENDEE_VIEW permission.")
+    @GetMapping("/stats")
+    public ResponseEntity<ApiResponse<AttendeeStatsResponse>> getStats(
+            @Parameter(description = "Optional Event UUID") @RequestParam(required = false) UUID eventId) {
+        return ResponseEntity.ok(ApiResponse.success(attendeeService.getAttendeeStats(eventId)));
     }
 
     @Operation(summary = "Get attendee statistics for event", description = "Returns total, confirmed, cancelled, and checked-in counts for an event. Requires ATTENDEE_VIEW permission.")

@@ -212,21 +212,34 @@ class UserRolePermissionAttendeeTest {
         assertThat(createdAtt.getId()).isNotNull();
         assertThat(createdAtt.getEmail()).isEqualTo(attendeeEmail);
         assertThat(createdAtt.getPassId()).isNull();
+        assertThat(createdAtt.isHasPass()).isFalse();
 
         // Duplicate registration for same event must fail
         assertThatThrownBy(() -> attendeeService.createAttendee(attReq))
                 .isInstanceOf(DuplicateResourceException.class)
                 .hasMessageContaining("already registered for event");
 
-        // Stats calculation
+        // Stats calculation (event-scoped and global)
         AttendeeStatsResponse stats = attendeeService.getAttendeeStats(testEvent.getId());
         assertThat(stats.getTotalAttendees()).isGreaterThanOrEqualTo(1);
         assertThat(stats.getConfirmedAttendees()).isGreaterThanOrEqualTo(1);
 
-        // Search attendees
+        AttendeeStatsResponse globalStats = attendeeService.getAttendeeStats(null);
+        assertThat(globalStats.getTotalAttendees()).isGreaterThanOrEqualTo(1);
+        assertThat(globalStats.getConfirmedAttendees()).isGreaterThanOrEqualTo(1);
+
+        // Search attendees with hasPass filter
         Page<AttendeeResponse> page = attendeeService.getAttendees(testEvent.getId(), "Alice",
                 RegistrationStatus.CONFIRMED, null, PageRequest.of(0, 10));
         assertThat(page.getContent()).extracting("email").contains(attendeeEmail);
+
+        Page<AttendeeResponse> withoutPassPage = attendeeService.getAttendees(testEvent.getId(), "Alice",
+                RegistrationStatus.CONFIRMED, null, false, PageRequest.of(0, 10));
+        assertThat(withoutPassPage.getContent()).extracting("email").contains(attendeeEmail);
+
+        Page<AttendeeResponse> withPassPage = attendeeService.getAttendees(testEvent.getId(), "Alice",
+                RegistrationStatus.CONFIRMED, null, true, PageRequest.of(0, 10));
+        assertThat(withPassPage.getContent()).extracting("email").doesNotContain(attendeeEmail);
     }
 
     // ===== 4. Refresh Token Security & Rotation Tests =====

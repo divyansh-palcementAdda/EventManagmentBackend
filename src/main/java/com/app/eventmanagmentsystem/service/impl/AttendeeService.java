@@ -55,6 +55,18 @@ public class AttendeeService {
             RegistrationStatus status,
             String checkInStatus,
             Pageable pageable) {
+        return getAttendees(eventId, search, status, checkInStatus, null, pageable);
+    }
+
+    @PreAuthorize("hasAuthority('ATTENDEE_VIEW')")
+    @Transactional(readOnly = true)
+    public Page<AttendeeResponse> getAttendees(
+            UUID eventId,
+            String search,
+            RegistrationStatus status,
+            String checkInStatus,
+            Boolean hasPass,
+            Pageable pageable) {
 
         Pageable safePageable = sanitizePageable(pageable);
 
@@ -76,7 +88,7 @@ public class AttendeeService {
         }
 
         Specification<Attendee> spec = AttendeeSpecification.filterAttendees(
-                eventId, search, status, checkInStatus, checkedInAttendeeIds);
+                eventId, search, status, checkInStatus, checkedInAttendeeIds, hasPass);
 
         Page<Attendee> attendeesPage = attendeeRepository.findAll(spec, safePageable);
 
@@ -183,14 +195,15 @@ public class AttendeeService {
     @PreAuthorize("hasAuthority('ATTENDEE_VIEW')")
     @Transactional(readOnly = true)
     public AttendeeStatsResponse getAttendeeStats(UUID eventId) {
-        if (!eventRepository.existsById(eventId)) {
+        if (eventId != null && !eventRepository.existsById(eventId)) {
             throw new ResourceNotFoundException("Event", eventId.toString());
         }
 
-        long total = attendeeRepository.countByEventId(eventId);
-        long confirmed = attendeeRepository.countConfirmedByEventId(eventId);
-        long cancelled = attendeeRepository.countCancelledByEventId(eventId);
-        long checkedIn = checkInRepository.countUniqueCheckedInPassesByEvent(eventId);
+        long total = eventId != null ? attendeeRepository.countByEventId(eventId) : attendeeRepository.count();
+        long confirmed = eventId != null ? attendeeRepository.countConfirmedByEventId(eventId) : attendeeRepository.countConfirmed();
+        long cancelled = eventId != null ? attendeeRepository.countCancelledByEventId(eventId) : attendeeRepository.countCancelled();
+        long checkedIn = eventId != null ? checkInRepository.countUniqueCheckedInPassesByEvent(eventId) : checkInRepository.countUniqueCheckedInPasses();
+        long withPass = eventId != null ? passRepository.countWithAttendeeByEventId(eventId) : passRepository.countWithAttendee();
 
         return AttendeeStatsResponse.builder()
                 .eventId(eventId)
@@ -198,6 +211,7 @@ public class AttendeeService {
                 .confirmedAttendees(confirmed)
                 .cancelledAttendees(cancelled)
                 .checkedInCount(checkedIn)
+                .withPass(withPass)
                 .build();
     }
 
@@ -267,6 +281,34 @@ public class AttendeeService {
                 .max(Instant::compareTo)
                 .orElse(null);
 
+        List<AttendeeResponse.CheckInSummary> checkInSummaries = checkIns.stream()
+                .map(ci -> AttendeeResponse.CheckInSummary.builder()
+                        .id(ci.getId())
+                        .gateName(ci.getCheckedInByName() != null ? "Gate (" + ci.getCheckedInByName() + ")" : "Main Gate")
+                        .operatorName(ci.getCheckedInByName())
+                        .checkedInAt(ci.getCheckedInAt())
+                        .dayNumber(ci.getEventDay() != null ? ci.getEventDay().getDayNumber() : null)
+                        .build())
+                .collect(Collectors.toList());
+
+        AttendeeResponse.EventSummary eventSummary = a.getEvent() != null ? AttendeeResponse.EventSummary.builder()
+                .id(a.getEvent().getId())
+                .eventCode(a.getEvent().getEventCode())
+                .name(a.getEvent().getName())
+                .startsAt(a.getEvent().getStartsAt())
+                .endsAt(a.getEvent().getEndsAt())
+                .venue(a.getEvent().getVenue())
+                .build() : null;
+
+        AttendeeResponse.LinkedPassSummary passSummary = pass != null ? AttendeeResponse.LinkedPassSummary.builder()
+                .id(pass.getId())
+                .passNumber(pass.getPassNumber())
+                .sequenceNumber(pass.getSequenceNumber())
+                .status(pass.getStatus().name())
+                .category(pass.getCategory())
+                .token(pass.getPassNumber())
+                .build() : null;
+
         return AttendeeResponse.builder()
                 .id(a.getId())
                 .eventId(a.getEvent().getId())
@@ -283,13 +325,20 @@ public class AttendeeService {
                 .studentId(a.getStudentId())
                 .registrationStatus(a.getRegistrationStatus())
                 .registeredAt(a.getRegisteredAt())
+                .hasPass(pass != null)
                 .passId(pass != null ? pass.getId() : null)
                 .passNumber(pass != null ? pass.getPassNumber() : null)
                 .sequenceNumber(pass != null ? pass.getSequenceNumber() : null)
                 .passStatus(pass != null ? pass.getStatus().name() : null)
+                .passCategory(pass != null ? pass.getCategory() : null)
                 .checkedIn(checkedIn)
+                .checkInStatus(checkedIn ? "CHECKED_IN" : "NOT_CHECKED_IN")
                 .checkInCount(checkInCount)
                 .lastCheckedInAt(lastCheckedIn)
+                .checkedInAt(lastCheckedIn)
+                .event(eventSummary)
+                .linkedPass(passSummary)
+                .checkInHistory(checkInSummaries)
                 .createdAt(a.getCreatedAt())
                 .updatedAt(a.getUpdatedAt())
                 .build();

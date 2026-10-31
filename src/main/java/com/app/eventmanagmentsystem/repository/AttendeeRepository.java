@@ -30,4 +30,10 @@ public interface AttendeeRepository extends JpaRepository<Attendee, UUID>, JpaSp
 
     @Query("SELECT COUNT(a) FROM Attendee a WHERE a.event.id = :eventId AND a.registrationStatus = 'CANCELLED'")
     long countCancelledByEventId(@Param("eventId") UUID eventId);
+
+    @Query("SELECT COUNT(a) FROM Attendee a WHERE a.registrationStatus = 'CONFIRMED'")
+    long countConfirmed();
+
+    @Query("SELECT COUNT(a) FROM Attendee a WHERE a.registrationStatus = 'CANCELLED'")
+    long countCancelled();
 }

@@ -1,11 +1,13 @@
 package com.app.eventmanagmentsystem.repository.specification;
 
 import com.app.eventmanagmentsystem.model.Attendee;
+import com.app.eventmanagmentsystem.model.EventPass;
 import com.app.eventmanagmentsystem.model.enums.RegistrationStatus;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.util.ArrayList;
@@ -21,6 +23,16 @@ public class AttendeeSpecification {
             RegistrationStatus status,
             String checkInStatus,
             Collection<UUID> checkedInAttendeeIds) {
+        return filterAttendees(eventId, search, status, checkInStatus, checkedInAttendeeIds, null);
+    }
+
+    public static Specification<Attendee> filterAttendees(
+            UUID eventId,
+            String search,
+            RegistrationStatus status,
+            String checkInStatus,
+            Collection<UUID> checkedInAttendeeIds,
+            Boolean hasPass) {
 
         return (Root<Attendee> root, CriteriaQuery<?> query, CriteriaBuilder cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -55,8 +67,20 @@ public class AttendeeSpecification {
                 }
             }
 
+            if (hasPass != null) {
+                Subquery<UUID> subquery = query.subquery(UUID.class);
+                Root<EventPass> passSub = subquery.from(EventPass.class);
+                subquery.select(passSub.get("attendee").get("id"))
+                        .where(cb.isNotNull(passSub.get("attendee")));
+
+                if (Boolean.TRUE.equals(hasPass)) {
+                    predicates.add(root.get("id").in(subquery));
+                } else {
+                    predicates.add(cb.not(root.get("id").in(subquery)));
+                }
+            }
+
             return cb.and(predicates.toArray(new Predicate[0]));
         };
     }
 }
-
