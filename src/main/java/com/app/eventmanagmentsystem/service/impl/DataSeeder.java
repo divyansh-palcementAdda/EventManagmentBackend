@@ -95,7 +95,10 @@ public class DataSeeder implements ApplicationRunner {
         new String[]{"PASS_REVOKE",       "Revoke passes",               "PASS",       "REVOKE"},
         new String[]{"PASS_ACTIVATE",     "Activate passes",             "PASS",       "ACTIVATE"},
         new String[]{"ATTENDEE_VIEW",     "View attendees",              "ATTENDEE",   "VIEW"},
+        new String[]{"ATTENDEE_CREATE",   "Create attendees",            "ATTENDEE",   "CREATE"},
         new String[]{"ATTENDEE_UPDATE",   "Update attendee details",     "ATTENDEE",   "UPDATE"},
+        new String[]{"ATTENDEE_DELETE",   "Delete attendees",            "ATTENDEE",   "DELETE"},
+        new String[]{"ATTENDEE_EXPORT",   "Export attendees data",       "ATTENDEE",   "EXPORT"},
         new String[]{"CHECKIN_SCAN",      "Perform check-in scan",       "CHECKIN",    "SCAN"},
         new String[]{"CHECKIN_VIEW",      "View check-in records",       "CHECKIN",    "VIEW"},
         new String[]{"REPORT_VIEW",       "View reports",                "REPORT",     "VIEW"},
@@ -110,7 +113,7 @@ public class DataSeeder implements ApplicationRunner {
             "EVENT_VIEW","EVENT_CREATE","EVENT_UPDATE","EVENT_CANCEL",
             "GATEKEEPER_ASSIGN","GATEKEEPER_REMOVE",
             "PASS_VIEW","PASS_GENERATE","PASS_REVOKE",
-            "ATTENDEE_VIEW","ATTENDEE_UPDATE",
+            "ATTENDEE_VIEW","ATTENDEE_CREATE","ATTENDEE_UPDATE","ATTENDEE_DELETE","ATTENDEE_EXPORT",
             "CHECKIN_VIEW","REPORT_VIEW","NOTIFICATION_VIEW"
         ),
         "GATEKEEPER", Set.of(

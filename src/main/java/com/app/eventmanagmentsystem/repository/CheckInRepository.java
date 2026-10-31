@@ -30,6 +30,9 @@ public interface CheckInRepository extends JpaRepository<CheckIn, UUID> {
     @Query("SELECT COUNT(c) FROM CheckIn c WHERE c.event.id = :eventId")
     long countByEventId(@Param("eventId") UUID eventId);
 
+    @Query("SELECT COUNT(DISTINCT c.pass.id) FROM CheckIn c WHERE c.event.id = :eventId")
+    long countUniqueCheckedInPassesByEvent(@Param("eventId") UUID eventId);
+
     @Query("SELECT COUNT(c) FROM CheckIn c WHERE c.event.id = :eventId AND c.eventDay.id = :eventDayId")
     long countByEventIdAndEventDayId(@Param("eventId") UUID eventId, @Param("eventDayId") UUID eventDayId);
 

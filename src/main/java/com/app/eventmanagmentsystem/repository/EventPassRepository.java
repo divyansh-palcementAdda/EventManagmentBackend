@@ -60,5 +60,9 @@ public interface EventPassRepository extends JpaRepository<EventPass, UUID>, Jpa
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT p FROM EventPass p WHERE p.id IN :ids")
     List<EventPass> findAllByIdForUpdate(@Param("ids") java.util.Collection<UUID> ids);
+
+    Optional<EventPass> findByAttendeeId(UUID attendeeId);
+
+    List<EventPass> findByAttendeeIdIn(java.util.Collection<UUID> attendeeIds);
 }
 

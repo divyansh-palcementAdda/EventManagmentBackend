@@ -196,13 +196,9 @@ public class GatekeeperService {
                 .orElseThrow(() -> new ResourceNotFoundException("User", userId.toString()));
 
         boolean hasGatekeeperRole = user.getRoles().stream()
-                .anyMatch(r -> "GATEKEEPER".equals(r.getName()) || "SUPER_ADMIN".equals(r.getName())
-                        || "EVENT_ADMIN".equals(r.getName()));
+                .anyMatch(r -> "GATEKEEPER".equals(r.getName()));
         if (!hasGatekeeperRole) {
-            Role gatekeeperRole = roleRepository.findByName("GATEKEEPER")
-                    .orElseThrow(() -> new ResourceNotFoundException("Role", "GATEKEEPER"));
-            user.getRoles().add(gatekeeperRole);
-            userRepository.save(user);
+            throw new InvalidRequestException("User " + user.getEmail() + " does not have the GATEKEEPER role.");
         }
 
         Optional<EventGatekeeper> existingActive = gatekeeperRepository.findActiveAssignment(eventId, userId);
