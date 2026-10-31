@@ -21,5 +21,8 @@ public class GeneratePassRequest {
 
     /** Optional client-supplied idempotency key (for batch-of-1 requests). */
     private String idempotencyKey;
+
+    /** Optional specific event days for pass validity. If empty/null, valid for all days of the event. */
+    private java.util.List<UUID> validDayIds;
 }
 

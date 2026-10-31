@@ -55,6 +55,9 @@ class CheckInServiceTest {
     private CheckInRepository checkInRepository;
 
     @Autowired
+    private EventDayRepository eventDayRepository;
+
+    @Autowired
     private PassGenerationService passGenerationService;
 
     @Autowired
@@ -237,5 +240,64 @@ class CheckInServiceTest {
 
         assertThatThrownBy(() -> checkInService.performCheckIn(ciReq))
                 .isInstanceOf(InvalidQrTokenException.class);
+    }
+
+    @Test
+    @DisplayName("Check-in: multi-day pass allows Day 1 and Day 2 check-in separately, rejects duplicates")
+    void multiDayCheckInWorkflow() {
+        authenticateAs(gatekeeperUser);
+
+        java.time.LocalDate d1 = java.time.LocalDate.now();
+        java.time.LocalDate d2 = d1.plusDays(1);
+        java.time.LocalDate d3 = d1.plusDays(2);
+
+        EventDay day1 = eventDayRepository.saveAndFlush(new EventDay(testEvent, 1, d1, "Day 1"));
+        EventDay day2 = eventDayRepository.saveAndFlush(new EventDay(testEvent, 2, d2, "Day 2"));
+        EventDay day3 = eventDayRepository.saveAndFlush(new EventDay(testEvent, 3, d3, "Day 3"));
+
+        // Generate pass permitted only for Day 1 and Day 2
+        GeneratePassRequest genReq = new GeneratePassRequest();
+        genReq.setEventId(testEvent.getId());
+        genReq.setBatchSize(1);
+        genReq.setValidDayIds(java.util.List.of(day1.getId(), day2.getId()));
+        PassResponse pass = passGenerationService.generatePasses(genReq).get(0);
+
+        // Activate pass
+        ActivatePassRequest actReq = new ActivatePassRequest();
+        actReq.setEventId(testEvent.getId());
+        actReq.setRawToken(pass.getRawToken());
+        actReq.setAttendeeFullName("Multi Day Attendee");
+        actReq.setAttendeeEmail("multiday@example.com");
+        passActivationService.activatePass(actReq);
+
+        // Day 1 check-in
+        CheckInRequest day1Req = new CheckInRequest();
+        day1Req.setEventId(testEvent.getId());
+        day1Req.setEventDayId(day1.getId());
+        day1Req.setRawToken(pass.getRawToken());
+        CheckInResponse res1 = checkInService.performCheckIn(day1Req);
+        assertThat(res1.getCheckInId()).isNotNull();
+        assertThat(res1.getDayNumber()).isEqualTo(1);
+
+        // Repeat Day 1 check-in should fail
+        assertThatThrownBy(() -> checkInService.performCheckIn(day1Req))
+                .isInstanceOf(PassAlreadyCheckedInException.class);
+
+        // Day 2 check-in should succeed!
+        CheckInRequest day2Req = new CheckInRequest();
+        day2Req.setEventId(testEvent.getId());
+        day2Req.setEventDayId(day2.getId());
+        day2Req.setRawToken(pass.getRawToken());
+        CheckInResponse res2 = checkInService.performCheckIn(day2Req);
+        assertThat(res2.getCheckInId()).isNotNull();
+        assertThat(res2.getDayNumber()).isEqualTo(2);
+
+        // Day 3 check-in should fail because pass is not valid for Day 3
+        CheckInRequest day3Req = new CheckInRequest();
+        day3Req.setEventId(testEvent.getId());
+        day3Req.setEventDayId(day3.getId());
+        day3Req.setRawToken(pass.getRawToken());
+        assertThatThrownBy(() -> checkInService.performCheckIn(day3Req))
+                .isInstanceOf(PassNotValidForDayException.class);
     }
 }

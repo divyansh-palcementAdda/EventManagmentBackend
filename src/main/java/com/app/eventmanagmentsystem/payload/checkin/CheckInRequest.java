@@ -17,6 +17,9 @@ public class CheckInRequest {
     @NotNull
     private UUID eventId;
 
+    /** Optional explicit event day UUID for multi-day check-in. If omitted, resolves automatically. */
+    private UUID eventDayId;
+
     /** Optional client request ID for idempotency tracking. */
     private String requestId;
 }

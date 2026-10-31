@@ -13,11 +13,16 @@ public class PassResponse {
 
     private final UUID id;
     private final String passNumber;
+    private final Long sequenceNumber;
     private final PassStatus status;
     private final UUID eventId;
     private final String eventCode;
     private final Instant generatedAt;
     private final Instant activatedAt;
+    private final String attendeeName;
+    private final String attendeeEmail;
+    private final String attendeeMobileNumber;
+    private final java.util.List<com.app.eventmanagmentsystem.payload.event.EventDayResponse> validDays;
 
     /**
      * Raw QR token — returned ONLY at generation time.

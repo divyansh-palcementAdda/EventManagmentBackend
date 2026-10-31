@@ -25,7 +25,8 @@ import java.util.UUID;
         @Index(name = "idx_ep_pass_number", columnList = "pass_number", unique = true),
         @Index(name = "idx_ep_token_hash", columnList = "token_hash", unique = true),
         @Index(name = "idx_ep_status", columnList = "status"),
-        @Index(name = "idx_ep_attendee", columnList = "attendee_id")
+        @Index(name = "idx_ep_attendee", columnList = "attendee_id"),
+        @Index(name = "idx_ep_event_sequence", columnList = "event_id, sequence_number")
 })
 @Getter
 @Setter
@@ -44,6 +45,12 @@ public class EventPass extends BaseEntity {
     private String passNumber;
 
     /**
+     * Explicit numeric sequence number for reliable range selection and ordering.
+     */
+    @Column(name = "sequence_number")
+    private Long sequenceNumber;
+
+    /**
      * SHA-256 hex digest of the raw activation/QR token.
      * Never store the raw token here.
      */
@@ -58,6 +65,18 @@ public class EventPass extends BaseEntity {
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "attendee_id", unique = true)
     private Attendee attendee;
+
+    /**
+     * Permitted event days for which this pass is valid.
+     * If empty, the pass is valid for all days of the event.
+     */
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "pass_valid_days",
+            joinColumns = @JoinColumn(name = "pass_id"),
+            inverseJoinColumns = @JoinColumn(name = "event_day_id")
+    )
+    private java.util.Set<EventDay> validDays = new java.util.HashSet<>();
 
     @Column(name = "generated_at", nullable = false, updatable = false)
     private Instant generatedAt;

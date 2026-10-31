@@ -1,13 +1,17 @@
 package com.app.eventmanagmentsystem.service.impl;
 
-import com.app.eventmanagmentsystem.exceptions.*;
+import com.app.eventmanagmentsystem.exceptions.InvalidRequestException;
+import com.app.eventmanagmentsystem.exceptions.ResourceNotFoundException;
 import com.app.eventmanagmentsystem.model.Event;
+import com.app.eventmanagmentsystem.model.EventDay;
 import com.app.eventmanagmentsystem.model.EventPass;
 import com.app.eventmanagmentsystem.model.enums.AuditOutcome;
 import com.app.eventmanagmentsystem.model.enums.EventStatus;
 import com.app.eventmanagmentsystem.model.enums.PassStatus;
+import com.app.eventmanagmentsystem.payload.event.EventDayResponse;
 import com.app.eventmanagmentsystem.payload.pass.GeneratePassRequest;
 import com.app.eventmanagmentsystem.payload.pass.PassResponse;
+import com.app.eventmanagmentsystem.repository.EventDayRepository;
 import com.app.eventmanagmentsystem.repository.EventPassRepository;
 import com.app.eventmanagmentsystem.repository.EventRepository;
 import com.app.eventmanagmentsystem.service.interfaces.AuditLogService;
@@ -23,9 +27,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Pass generation service.
@@ -44,9 +47,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class PassGenerationService {
 
-    private static final int MAX_UNIQUE_RETRIES = 3;
-
     private final EventRepository eventRepository;
+    private final EventDayRepository eventDayRepository;
     private final EventPassRepository passRepository;
     private final QrTokenUtil qrTokenUtil;
     private final AuditLogService auditLogService;
@@ -72,9 +74,12 @@ public class PassGenerationService {
 
         validateEventForPassGeneration(event, request.getBatchSize());
 
+        // Resolve permitted event days
+        Set<EventDay> permittedDays = resolvePermittedDays(event, request.getValidDayIds());
+
         List<PassResponse> results = new ArrayList<>(request.getBatchSize());
         for (int i = 0; i < request.getBatchSize(); i++) {
-            PassResponse passResponse = generateSinglePass(event, request.getIdempotencyKey(), i);
+            PassResponse passResponse = generateSinglePass(event, request.getIdempotencyKey(), i, permittedDays);
             results.add(passResponse);
         }
 
@@ -84,7 +89,25 @@ public class PassGenerationService {
         return results;
     }
 
-    private PassResponse generateSinglePass(Event event, String idempotencyKey, int batchIndex) {
+    private Set<EventDay> resolvePermittedDays(Event event, List<UUID> requestedDayIds) {
+        List<EventDay> allDays = eventDayRepository.findByEventIdOrderByDayNumberAsc(event.getId());
+        if (requestedDayIds == null || requestedDayIds.isEmpty()) {
+            return new HashSet<>(allDays);
+        }
+
+        Set<UUID> validIds = allDays.stream().map(EventDay::getId).collect(Collectors.toSet());
+        for (UUID requestedId : requestedDayIds) {
+            if (!validIds.contains(requestedId)) {
+                throw new InvalidRequestException("Event day ID " + requestedId + " does not belong to event " + event.getEventCode());
+            }
+        }
+
+        return allDays.stream()
+                .filter(d -> requestedDayIds.contains(d.getId()))
+                .collect(Collectors.toSet());
+    }
+
+    private PassResponse generateSinglePass(Event event, String idempotencyKey, int batchIndex, Set<EventDay> permittedDays) {
         // Increment sequence counter atomically within the locked transaction
         eventRepository.incrementPassSequenceCounter(event.getId());
         // Re-read the counter after increment
@@ -98,9 +121,12 @@ public class PassGenerationService {
         EventPass pass = new EventPass();
         pass.setEvent(event);
         pass.setPassNumber(passNumber);
+        pass.setSequenceNumber(sequence);
         pass.setTokenHash(tokenHash);
         pass.setStatus(PassStatus.NOT_ACTIVATED);
         pass.setGeneratedAt(Instant.now());
+        pass.setValidDays(new HashSet<>(permittedDays));
+
         if (batchIndex == 0 && idempotencyKey != null) {
             pass.setIdempotencyKey(idempotencyKey);
         }
@@ -125,7 +151,6 @@ public class PassGenerationService {
     }
 
     private String formatPassNumber(String eventCode, String seriesCode, long sequence) {
-        // Minimum 4 digits, expands naturally beyond 9999
         return String.format("%s-%s-%04d", eventCode, seriesCode, sequence);
     }
 
@@ -144,30 +169,60 @@ public class PassGenerationService {
         return toResponseWithoutToken(pass);
     }
 
+    private List<EventDayResponse> mapDays(Set<EventDay> days) {
+        if (days == null) return Collections.emptyList();
+        return days.stream()
+                .sorted(Comparator.comparingInt(EventDay::getDayNumber))
+                .map(d -> EventDayResponse.builder()
+                        .id(d.getId())
+                        .dayNumber(d.getDayNumber())
+                        .eventDate(d.getEventDate())
+                        .label(d.getLabel())
+                        .build())
+                .collect(Collectors.toList());
+    }
+
     private PassResponse toResponseWithToken(EventPass pass, String rawToken, Event event) {
+        String attendeeName = pass.getAttendee() != null ? pass.getAttendee().getFullName() : null;
+        String attendeeEmail = pass.getAttendee() != null ? pass.getAttendee().getEmail() : null;
+        String attendeeMobile = pass.getAttendee() != null ? pass.getAttendee().getMobileNumber() : null;
+
         return PassResponse.builder()
                 .id(pass.getId())
                 .passNumber(pass.getPassNumber())
+                .sequenceNumber(pass.getSequenceNumber())
                 .status(pass.getStatus())
                 .eventId(event.getId())
                 .eventCode(event.getEventCode())
                 .generatedAt(pass.getGeneratedAt())
                 .activatedAt(pass.getActivatedAt())
+                .attendeeName(attendeeName)
+                .attendeeEmail(attendeeEmail)
+                .attendeeMobileNumber(attendeeMobile)
+                .validDays(mapDays(pass.getValidDays()))
                 .rawToken(rawToken)
                 .build();
     }
 
     private PassResponse toResponseWithoutToken(EventPass pass) {
+        String attendeeName = pass.getAttendee() != null ? pass.getAttendee().getFullName() : null;
+        String attendeeEmail = pass.getAttendee() != null ? pass.getAttendee().getEmail() : null;
+        String attendeeMobile = pass.getAttendee() != null ? pass.getAttendee().getMobileNumber() : null;
+
         return PassResponse.builder()
                 .id(pass.getId())
                 .passNumber(pass.getPassNumber())
+                .sequenceNumber(pass.getSequenceNumber())
                 .status(pass.getStatus())
                 .eventId(pass.getEvent().getId())
                 .eventCode(pass.getEvent().getEventCode())
                 .generatedAt(pass.getGeneratedAt())
                 .activatedAt(pass.getActivatedAt())
+                .attendeeName(attendeeName)
+                .attendeeEmail(attendeeEmail)
+                .attendeeMobileNumber(attendeeMobile)
+                .validDays(mapDays(pass.getValidDays()))
                 .rawToken(null)
                 .build();
     }
 }
-

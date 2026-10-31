@@ -6,5 +6,9 @@ public class PassAlreadyCheckedInException extends AppException {
     public PassAlreadyCheckedInException() {
         super("PASS_ALREADY_CHECKED_IN", "This pass has already been checked in.", HttpStatus.CONFLICT);
     }
+
+    public PassAlreadyCheckedInException(String message) {
+        super("PASS_ALREADY_CHECKED_IN", message, HttpStatus.CONFLICT);
+    }
 }
 

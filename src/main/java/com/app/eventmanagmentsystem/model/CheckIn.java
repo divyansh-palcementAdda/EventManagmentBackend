@@ -2,23 +2,24 @@ package com.app.eventmanagmentsystem.model;
 
 import com.app.eventmanagmentsystem.model.audit.BaseEntity;
 import jakarta.persistence.*;
-import lombok.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.Instant;
-import java.util.UUID;
 
 /**
- * Records a successful event entry for a pass.
+ * Records a successful event entry for a pass on a specific event day.
  *
  * <p>Invariants:
  * <ul>
- *   <li>One pass → at most one CheckIn (enforced by unique constraint on pass_id).</li>
+ *   <li>One pass → at most one CheckIn per event day (enforced by unique constraint on pass_id + event_day_id).</li>
  *   <li>CheckIn records are immutable after creation — no UPDATE from public APIs.</li>
  * </ul>
  */
 @Entity
 @Table(name = "check_ins", indexes = {
-        @Index(name = "idx_ci_pass", columnList = "pass_id", unique = true),
+        @Index(name = "idx_ci_pass_day", columnList = "pass_id, event_day_id", unique = true),
         @Index(name = "idx_ci_event", columnList = "event_id"),
         @Index(name = "idx_ci_attendee", columnList = "attendee_id"),
         @Index(name = "idx_ci_checked_in_at", columnList = "checked_in_at")
@@ -32,10 +33,14 @@ public class CheckIn extends BaseEntity {
     @JoinColumn(name = "event_id", nullable = false, updatable = false)
     private Event event;
 
-    /** Unique — enforces one successful check-in per pass at DB level. */
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "pass_id", nullable = false, unique = true, updatable = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "pass_id", nullable = false, updatable = false)
     private EventPass pass;
+
+    /** The specific event day for which this check-in entry occurred. */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "event_day_id", nullable = false, updatable = false)
+    private EventDay eventDay;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "attendee_id", nullable = false, updatable = false)
@@ -57,4 +62,3 @@ public class CheckIn extends BaseEntity {
     @Column(name = "request_id", length = 100, updatable = false)
     private String requestId;
 }
-

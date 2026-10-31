@@ -8,19 +8,26 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 @Repository
 public interface CheckInRepository extends JpaRepository<CheckIn, UUID> {
 
-    Optional<CheckIn> findByPassId(UUID passId);
+    List<CheckIn> findByPassId(UUID passId);
 
     boolean existsByPassId(UUID passId);
+
+    boolean existsByPassIdAndEventDayId(UUID passId, UUID eventDayId);
+
+    Optional<CheckIn> findByPassIdAndEventDayId(UUID passId, UUID eventDayId);
 
     Page<CheckIn> findByEventId(UUID eventId, Pageable pageable);
 
     @Query("SELECT COUNT(c) FROM CheckIn c WHERE c.event.id = :eventId")
     long countByEventId(@Param("eventId") UUID eventId);
-}
 
+    @Query("SELECT COUNT(c) FROM CheckIn c WHERE c.event.id = :eventId AND c.eventDay.id = :eventDayId")
+    long countByEventIdAndEventDayId(@Param("eventId") UUID eventId, @Param("eventDayId") UUID eventDayId);
+}

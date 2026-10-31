@@ -27,6 +27,7 @@ public class EventResponse {
     private final CheckInPolicy checkInPolicy;
     private final Integer maximumPasses;
     private final long totalPassesGenerated;
+    private final java.util.List<EventDayResponse> days;
     private final Instant createdAt;
     private final Instant updatedAt;
 }

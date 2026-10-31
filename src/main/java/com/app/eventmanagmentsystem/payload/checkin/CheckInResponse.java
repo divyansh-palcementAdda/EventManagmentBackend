@@ -18,6 +18,10 @@ public class CheckInResponse {
     private final String attendeeEmail;
     private final UUID eventId;
     private final String eventName;
+    private final UUID eventDayId;
+    private final Integer dayNumber;
+    private final String eventDate;
+    private final String eventDayLabel;
     private final Instant checkedInAt;
     private final String checkedInByName;
 }
