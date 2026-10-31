@@ -22,6 +22,9 @@ public class PassResponse {
     private final String attendeeName;
     private final String attendeeEmail;
     private final String attendeeMobileNumber;
+    private final boolean checkedIn;
+    private final Long checkInCount;
+    private final Instant lastCheckedInAt;
     private final java.util.List<com.app.eventmanagmentsystem.payload.event.EventDayResponse> validDays;
 
     /**

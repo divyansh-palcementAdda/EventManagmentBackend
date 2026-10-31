@@ -2,6 +2,7 @@ package com.app.eventmanagmentsystem.service.impl;
 
 import com.app.eventmanagmentsystem.exceptions.InvalidRequestException;
 import com.app.eventmanagmentsystem.exceptions.ResourceNotFoundException;
+import com.app.eventmanagmentsystem.model.CheckIn;
 import com.app.eventmanagmentsystem.model.Event;
 import com.app.eventmanagmentsystem.model.EventDay;
 import com.app.eventmanagmentsystem.model.EventPass;
@@ -11,9 +12,11 @@ import com.app.eventmanagmentsystem.model.enums.PassStatus;
 import com.app.eventmanagmentsystem.payload.event.EventDayResponse;
 import com.app.eventmanagmentsystem.payload.pass.GeneratePassRequest;
 import com.app.eventmanagmentsystem.payload.pass.PassResponse;
+import com.app.eventmanagmentsystem.repository.CheckInRepository;
 import com.app.eventmanagmentsystem.repository.EventDayRepository;
 import com.app.eventmanagmentsystem.repository.EventPassRepository;
 import com.app.eventmanagmentsystem.repository.EventRepository;
+import com.app.eventmanagmentsystem.repository.specification.PassSpecification;
 import com.app.eventmanagmentsystem.service.interfaces.AuditLogService;
 import com.app.eventmanagmentsystem.util.QrTokenUtil;
 import jakarta.persistence.EntityManager;
@@ -22,6 +25,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,6 +54,7 @@ public class PassGenerationService {
     private final EventRepository eventRepository;
     private final EventDayRepository eventDayRepository;
     private final EventPassRepository passRepository;
+    private final CheckInRepository checkInRepository;
     private final QrTokenUtil qrTokenUtil;
     private final AuditLogService auditLogService;
     private final EntityManager entityManager;
@@ -157,8 +162,47 @@ public class PassGenerationService {
     @PreAuthorize("hasAuthority('PASS_VIEW')")
     @Transactional(readOnly = true)
     public Page<PassResponse> listPassesByEvent(UUID eventId, Pageable pageable) {
-        return passRepository.findByEventId(eventId, pageable)
-                .map(this::toResponseWithoutToken);
+        return searchPassesByEvent(eventId, null, null, null, null, null, null, pageable);
+    }
+
+    @PreAuthorize("hasAuthority('PASS_VIEW')")
+    @Transactional(readOnly = true)
+    public Page<PassResponse> searchPassesByEvent(
+            UUID eventId,
+            String search,
+            PassStatus status,
+            String checkInStatus,
+            UUID eventDayId,
+            Long fromSequence,
+            Long toSequence,
+            Pageable pageable) {
+
+        if (!eventRepository.existsById(eventId)) {
+            throw new ResourceNotFoundException("Event", eventId.toString());
+        }
+
+        EventDay eventDay = null;
+        if (eventDayId != null) {
+            eventDay = eventDayRepository.findById(eventDayId)
+                    .orElseThrow(() -> new ResourceNotFoundException("EventDay", eventDayId.toString()));
+        }
+
+        Set<UUID> checkedInPassIds = null;
+        if (checkInStatus != null && !checkInStatus.isBlank() && !"ALL".equalsIgnoreCase(checkInStatus)) {
+            checkedInPassIds = checkInRepository.findCheckedInPassIdsByEventId(eventId);
+        }
+
+        Specification<EventPass> spec = PassSpecification.filterPasses(
+                eventId, search, status, fromSequence, toSequence, eventDay, checkInStatus, checkedInPassIds);
+
+        Page<EventPass> page = passRepository.findAll(spec, pageable);
+
+        List<UUID> pagePassIds = page.getContent().stream().map(EventPass::getId).collect(Collectors.toList());
+        Map<UUID, List<CheckIn>> checkInsByPass = pagePassIds.isEmpty() ? Collections.emptyMap() :
+                checkInRepository.findByPassIdIn(pagePassIds).stream()
+                        .collect(Collectors.groupingBy(c -> c.getPass().getId()));
+
+        return page.map(pass -> toResponseWithCheckInInfo(pass, checkInsByPass.get(pass.getId())));
     }
 
     @PreAuthorize("hasAuthority('PASS_VIEW')")
@@ -199,6 +243,8 @@ public class PassGenerationService {
                 .attendeeName(attendeeName)
                 .attendeeEmail(attendeeEmail)
                 .attendeeMobileNumber(attendeeMobile)
+                .checkedIn(false)
+                .checkInCount(0L)
                 .validDays(mapDays(pass.getValidDays()))
                 .rawToken(rawToken)
                 .build();
@@ -208,6 +254,7 @@ public class PassGenerationService {
         String attendeeName = pass.getAttendee() != null ? pass.getAttendee().getFullName() : null;
         String attendeeEmail = pass.getAttendee() != null ? pass.getAttendee().getEmail() : null;
         String attendeeMobile = pass.getAttendee() != null ? pass.getAttendee().getMobileNumber() : null;
+        boolean isCheckedIn = checkInRepository.existsByPassId(pass.getId());
 
         return PassResponse.builder()
                 .id(pass.getId())
@@ -221,6 +268,36 @@ public class PassGenerationService {
                 .attendeeName(attendeeName)
                 .attendeeEmail(attendeeEmail)
                 .attendeeMobileNumber(attendeeMobile)
+                .checkedIn(isCheckedIn)
+                .checkInCount(isCheckedIn ? 1L : 0L)
+                .validDays(mapDays(pass.getValidDays()))
+                .rawToken(null)
+                .build();
+    }
+
+    private PassResponse toResponseWithCheckInInfo(EventPass pass, List<CheckIn> checkIns) {
+        String attendeeName = pass.getAttendee() != null ? pass.getAttendee().getFullName() : null;
+        String attendeeEmail = pass.getAttendee() != null ? pass.getAttendee().getEmail() : null;
+        String attendeeMobile = pass.getAttendee() != null ? pass.getAttendee().getMobileNumber() : null;
+        boolean isCheckedIn = checkIns != null && !checkIns.isEmpty();
+        long count = checkIns != null ? checkIns.size() : 0L;
+        Instant lastCheckIn = isCheckedIn ? checkIns.get(0).getCheckedInAt() : null;
+
+        return PassResponse.builder()
+                .id(pass.getId())
+                .passNumber(pass.getPassNumber())
+                .sequenceNumber(pass.getSequenceNumber())
+                .status(pass.getStatus())
+                .eventId(pass.getEvent().getId())
+                .eventCode(pass.getEvent().getEventCode())
+                .generatedAt(pass.getGeneratedAt())
+                .activatedAt(pass.getActivatedAt())
+                .attendeeName(attendeeName)
+                .attendeeEmail(attendeeEmail)
+                .attendeeMobileNumber(attendeeMobile)
+                .checkedIn(isCheckedIn)
+                .checkInCount(count)
+                .lastCheckedInAt(lastCheckIn)
                 .validDays(mapDays(pass.getValidDays()))
                 .rawToken(null)
                 .build();

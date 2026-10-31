@@ -30,5 +30,11 @@ public interface EventGatekeeperRepository extends JpaRepository<EventGatekeeper
 
     @Query("SELECT eg FROM EventGatekeeper eg JOIN FETCH eg.event WHERE eg.user.id = :userId AND eg.active = true")
     List<EventGatekeeper> findActiveEventsByGatekeeper(@Param("userId") UUID userId);
+
+    @Query("SELECT eg FROM EventGatekeeper eg JOIN FETCH eg.user WHERE eg.event.id = :eventId ORDER BY eg.active DESC, eg.assignedAt DESC")
+    List<EventGatekeeper> findAllAssignmentsByEvent(@Param("eventId") UUID eventId);
+
+    @Query("SELECT DISTINCT eg.user.id FROM EventGatekeeper eg WHERE eg.event.id = :eventId AND eg.active = true")
+    java.util.Set<UUID> findActiveGatekeeperUserIdsByEvent(@Param("eventId") UUID eventId);
 }
 
