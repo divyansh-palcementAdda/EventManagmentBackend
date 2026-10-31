@@ -1,5 +1,6 @@
 package com.app.eventmanagmentsystem.controller;
 
+import com.app.eventmanagmentsystem.model.enums.PassCategory;
 import com.app.eventmanagmentsystem.model.enums.PassStatus;
 import com.app.eventmanagmentsystem.payload.ApiResponse;
 import com.app.eventmanagmentsystem.payload.pass.*;
@@ -96,6 +97,7 @@ public class PassController {
                         @Parameter(description = "Event UUID") @PathVariable UUID eventId,
                         @Parameter(description = "Search query by pass #, sequence, attendee name or email") @RequestParam(required = false) String search,
                         @Parameter(description = "Pass status filter") @RequestParam(required = false) PassStatus status,
+                        @Parameter(description = "Pass category filter: STUDENT, OTHER") @RequestParam(required = false) PassCategory category,
                         @Parameter(description = "Check-in status: ALL, CHECKED_IN, NOT_CHECKED_IN") @RequestParam(required = false) String checkInStatus,
                         @Parameter(description = "Permitted event day filter") @RequestParam(required = false) UUID eventDayId,
                         @Parameter(description = "From sequence number") @RequestParam(required = false) Long fromSequence,
@@ -111,7 +113,7 @@ public class PassController {
                                 Sort.by(direction, safeSortBy));
 
                 Page<PassResponse> result = passGenerationService.searchPassesByEvent(
-                                eventId, search, status, checkInStatus, eventDayId, fromSequence, toSequence, pageable);
+                                eventId, search, status, category, checkInStatus, eventDayId, fromSequence, toSequence, pageable);
                 return ResponseEntity.ok(ApiResponse.success(result));
         }
 
@@ -145,10 +147,11 @@ public class PassController {
         public ResponseEntity<ApiResponse<List<PassExportItemResponse>>> exportPasses(
                         @Parameter(description = "Event UUID") @PathVariable UUID eventId,
                         @Parameter(description = "Pass status filter") @RequestParam(required = false) PassStatus status,
+                        @Parameter(description = "Pass category filter: STUDENT, OTHER") @RequestParam(required = false) PassCategory category,
                         @Parameter(description = "Starting sequence number") @RequestParam(required = false) Long fromSequence,
                         @Parameter(description = "Ending sequence number") @RequestParam(required = false) Long toSequence,
                         @Parameter(description = "Event day filter") @RequestParam(required = false) UUID dayId) {
-                List<PassExportItemResponse> items = bulkPassService.exportPasses(eventId, status, fromSequence,
+                List<PassExportItemResponse> items = bulkPassService.exportPasses(eventId, status, category, fromSequence,
                                 toSequence, dayId);
                 return ResponseEntity.ok(ApiResponse.success("Passes retrieved for export", items));
         }

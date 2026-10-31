@@ -156,6 +156,8 @@ class CheckInServiceTest {
         actReq.setRawToken(pass.getRawToken());
         actReq.setAttendeeFullName("Alice Smith");
         actReq.setAttendeeEmail("alice@example.com");
+        actReq.setAttendeeCollege("Stanford");
+        actReq.setAttendeeCourse("Engineering");
         passActivationService.activatePass(actReq);
 
         // 3. Perform check-in
@@ -207,6 +209,8 @@ class CheckInServiceTest {
         actReq.setRawToken(pass.getRawToken());
         actReq.setAttendeeFullName("Bob");
         actReq.setAttendeeEmail("bob@example.com");
+        actReq.setAttendeeCollege("Harvard");
+        actReq.setAttendeeCourse("Business");
         passActivationService.activatePass(actReq);
 
         CheckInRequest ciReq = new CheckInRequest();
@@ -232,6 +236,8 @@ class CheckInServiceTest {
         actReq.setRawToken(pass.getRawToken());
         actReq.setAttendeeFullName("Charlie");
         actReq.setAttendeeEmail("charlie@example.com");
+        actReq.setAttendeeCollege("Oxford");
+        actReq.setAttendeeCourse("History");
         passActivationService.activatePass(actReq);
 
         CheckInRequest ciReq = new CheckInRequest();
@@ -268,6 +274,8 @@ class CheckInServiceTest {
         actReq.setRawToken(pass.getRawToken());
         actReq.setAttendeeFullName("Multi Day Attendee");
         actReq.setAttendeeEmail("multiday@example.com");
+        actReq.setAttendeeCollege("Cambridge");
+        actReq.setAttendeeCourse("Mathematics");
         passActivationService.activatePass(actReq);
 
         // Day 1 check-in

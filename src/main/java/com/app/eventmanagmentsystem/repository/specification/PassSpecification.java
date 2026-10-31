@@ -3,6 +3,7 @@ package com.app.eventmanagmentsystem.repository.specification;
 import com.app.eventmanagmentsystem.model.Attendee;
 import com.app.eventmanagmentsystem.model.EventDay;
 import com.app.eventmanagmentsystem.model.EventPass;
+import com.app.eventmanagmentsystem.model.enums.PassCategory;
 import com.app.eventmanagmentsystem.model.enums.PassStatus;
 import jakarta.persistence.criteria.*;
 import org.springframework.data.jpa.domain.Specification;
@@ -18,6 +19,7 @@ public class PassSpecification {
             UUID eventId,
             String search,
             PassStatus status,
+            PassCategory category,
             Long fromSequence,
             Long toSequence,
             EventDay eventDay,
@@ -52,6 +54,11 @@ public class PassSpecification {
             // 3. Status filter
             if (status != null) {
                 predicates.add(cb.equal(root.get("status"), status));
+            }
+
+            // 3b. Category filter
+            if (category != null) {
+                predicates.add(cb.equal(root.get("category"), category));
             }
 
             // 4. Sequence range

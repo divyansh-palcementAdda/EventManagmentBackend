@@ -176,6 +176,8 @@ class PassServiceTest {
         actReq.setRawToken(pass.getRawToken());
         actReq.setAttendeeFullName("Jane Doe");
         actReq.setAttendeeEmail("jane.doe@example.com");
+        actReq.setAttendeeCollege("MIT");
+        actReq.setAttendeeCourse("Computer Science");
         actReq.setAttendeeOrganization("Acme Inc");
 
         PassResponse activated = passActivationService.activatePass(actReq);
@@ -218,6 +220,8 @@ class PassServiceTest {
         actReq.setRawToken(pass.getRawToken());
         actReq.setAttendeeFullName("Jane Doe");
         actReq.setAttendeeEmail("jane.doe@example.com");
+        actReq.setAttendeeCollege("MIT");
+        actReq.setAttendeeCourse("Computer Science");
 
         passActivationService.activatePass(actReq);
 
@@ -267,6 +271,8 @@ class PassServiceTest {
         actReq1.setRawToken(passes.get(0).getRawToken());
         actReq1.setAttendeeFullName("Jane Doe");
         actReq1.setAttendeeEmail("jane.doe@example.com");
+        actReq1.setAttendeeCollege("MIT");
+        actReq1.setAttendeeCourse("Computer Science");
         passActivationService.activatePass(actReq1);
 
         ActivatePassRequest actReq2 = new ActivatePassRequest();
@@ -274,8 +280,64 @@ class PassServiceTest {
         actReq2.setRawToken(passes.get(1).getRawToken());
         actReq2.setAttendeeFullName("Another Jane");
         actReq2.setAttendeeEmail("jane.doe@example.com"); // Duplicate email!
+        actReq2.setAttendeeCollege("MIT");
+        actReq2.setAttendeeCourse("Computer Science");
 
         assertThatThrownBy(() -> passActivationService.activatePass(actReq2))
                 .isInstanceOf(DuplicateResourceException.class);
+    }
+
+    @Test
+    @WithMockUser(authorities = "PASS_GENERATE")
+    @DisplayName("Pass activation: same attendee email can register for distinct events on separate passes")
+    void multiEventRegistrationForSameAttendeeAllowed() {
+        // Event 1 pass
+        GeneratePassRequest genReq1 = new GeneratePassRequest();
+        genReq1.setEventId(testEvent.getId());
+        genReq1.setBatchSize(1);
+        PassResponse pass1 = passGenerationService.generatePasses(genReq1).get(0);
+
+        ActivatePassRequest act1 = new ActivatePassRequest();
+        act1.setEventId(testEvent.getId());
+        act1.setRawToken(pass1.getRawToken());
+        act1.setAttendeeFullName("Sam Multiverse");
+        act1.setAttendeeEmail("sam@multiverse.test");
+        act1.setAttendeeCollege("Caltech");
+        act1.setAttendeeCourse("Physics");
+        PassResponse res1 = passActivationService.activatePass(act1);
+        assertThat(res1.getStatus()).isEqualTo(PassStatus.ACTIVATED);
+
+        // Event 2 pass (separate event)
+        Event event2 = new Event();
+        event2.setName("AI Summit");
+        event2.setEventCode("AISUMMIT");
+        event2.setPassSeriesCode("AIS26");
+        event2.setStartsAt(Instant.now().plusSeconds(7200));
+        event2.setEndsAt(Instant.now().plusSeconds(14400));
+        event2.setVenue("Convention Hall B");
+        event2.setStatus(EventStatus.PUBLISHED);
+        Event savedEvent2 = eventRepository.saveAndFlush(event2);
+
+        GeneratePassRequest genReq2 = new GeneratePassRequest();
+        genReq2.setEventId(savedEvent2.getId());
+        genReq2.setBatchSize(1);
+        genReq2.setCategory(com.app.eventmanagmentsystem.model.enums.PassCategory.OTHER);
+        PassResponse pass2 = passGenerationService.generatePasses(genReq2).get(0);
+
+        ActivatePassRequest act2 = new ActivatePassRequest();
+        act2.setEventId(savedEvent2.getId());
+        act2.setRawToken(pass2.getRawToken());
+        act2.setAttendeeFullName("Sam Multiverse");
+        act2.setAttendeeEmail("sam@multiverse.test");
+        act2.setAttendeeOrganization("OpenAI Research");
+        act2.setAttendeeDesignation("Research Scientist");
+        PassResponse res2 = passActivationService.activatePass(act2);
+
+        assertThat(res2.getStatus()).isEqualTo(PassStatus.ACTIVATED);
+        assertThat(res2.getCategory()).isEqualTo(com.app.eventmanagmentsystem.model.enums.PassCategory.OTHER);
+
+        // Confirm both attendees exist in their respective event scopes
+        assertThat(attendeeRepository.existsByEventAndEmail(testEvent.getId(), "sam@multiverse.test")).isTrue();
+        assertThat(attendeeRepository.existsByEventAndEmail(savedEvent2.getId(), "sam@multiverse.test")).isTrue();
     }
 }

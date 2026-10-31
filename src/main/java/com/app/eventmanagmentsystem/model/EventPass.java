@@ -1,6 +1,7 @@
 package com.app.eventmanagmentsystem.model;
 
 import com.app.eventmanagmentsystem.model.audit.BaseEntity;
+import com.app.eventmanagmentsystem.model.enums.PassCategory;
 import com.app.eventmanagmentsystem.model.enums.PassStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -56,6 +57,10 @@ public class EventPass extends BaseEntity {
      */
     @Column(name = "token_hash", nullable = false, unique = true, length = 64)
     private String tokenHash;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "category", nullable = false, length = 20)
+    private PassCategory category = PassCategory.STUDENT;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)

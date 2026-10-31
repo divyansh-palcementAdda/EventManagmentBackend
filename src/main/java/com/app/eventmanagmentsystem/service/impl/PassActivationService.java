@@ -105,6 +105,7 @@ public class PassActivationService {
                 .valid(true)
                 .passId(pass.getId())
                 .passNumber(pass.getPassNumber())
+                .category(pass.getCategory())
                 .status(pass.getStatus())
                 .eventId(event.getId())
                 .eventName(event.getName())
@@ -115,8 +116,8 @@ public class PassActivationService {
                 .validDays(validDays)
                 .isEligibleForActivation(eligible)
                 .message(message)
-                .attendeeName(attendeeName)
-                .attendeeEmail(attendeeEmail)
+                .attendeeName(pass.getStatus() == PassStatus.ACTIVATED ? null : attendeeName)
+                .attendeeEmail(pass.getStatus() == PassStatus.ACTIVATED ? null : attendeeEmail)
                 .build();
     }
 
@@ -156,14 +157,45 @@ public class PassActivationService {
                     "An attendee with this email is already registered for this event.");
         }
 
-        // Create attendee
+        // Create attendee with category-specific validation
         Attendee attendee = new Attendee();
         attendee.setEvent(event);
-        attendee.setFullName(request.getAttendeeFullName());
+        attendee.setFullName(request.getAttendeeFullName().trim());
         attendee.setEmail(normalizedEmail);
-        attendee.setMobileNumber(request.getAttendeeMobileNumber());
-        attendee.setOrganization(request.getAttendeeOrganization());
-        attendee.setDesignation(request.getAttendeeDesignation());
+        attendee.setMobileNumber(request.getAttendeeMobileNumber() != null ? request.getAttendeeMobileNumber().trim() : null);
+
+        if (pass.getCategory() == PassCategory.STUDENT) {
+            String college = request.getAttendeeCollege() != null && !request.getAttendeeCollege().isBlank()
+                    ? request.getAttendeeCollege().trim()
+                    : (request.getAttendeeOrganization() != null ? request.getAttendeeOrganization().trim() : "");
+            if (college.isBlank()) {
+                throw new InvalidRequestException("College or institution is required for student pass registration.");
+            }
+            String course = request.getAttendeeCourse() != null ? request.getAttendeeCourse().trim() : "";
+            if (course.isBlank()) {
+                throw new InvalidRequestException("Course or program is required for student pass registration.");
+            }
+            attendee.setCollege(college);
+            attendee.setOrganization(college);
+            attendee.setCourse(course);
+            if (request.getAttendeeYearSemester() != null && !request.getAttendeeYearSemester().isBlank()) {
+                attendee.setYearSemester(request.getAttendeeYearSemester().trim());
+            }
+            if (request.getAttendeeStudentId() != null && !request.getAttendeeStudentId().isBlank()) {
+                attendee.setStudentId(request.getAttendeeStudentId().trim());
+            }
+            attendee.setDesignation(request.getAttendeeDesignation() != null && !request.getAttendeeDesignation().isBlank()
+                    ? request.getAttendeeDesignation().trim() : "Student");
+        } else {
+            // Category == OTHER
+            if (request.getAttendeeOrganization() != null && !request.getAttendeeOrganization().isBlank()) {
+                attendee.setOrganization(request.getAttendeeOrganization().trim());
+            }
+            if (request.getAttendeeDesignation() != null && !request.getAttendeeDesignation().isBlank()) {
+                attendee.setDesignation(request.getAttendeeDesignation().trim());
+            }
+        }
+
         attendee.setRegistrationStatus(RegistrationStatus.CONFIRMED);
         attendee.setRegisteredAt(now);
         Attendee savedAttendee = attendeeRepository.save(attendee);
@@ -185,6 +217,7 @@ public class PassActivationService {
                 .id(savedPass.getId())
                 .passNumber(savedPass.getPassNumber())
                 .sequenceNumber(savedPass.getSequenceNumber())
+                .category(savedPass.getCategory())
                 .status(savedPass.getStatus())
                 .eventId(event.getId())
                 .eventCode(event.getEventCode())
@@ -228,8 +261,14 @@ public class PassActivationService {
             outbox.setReferenceId(pass.getId().toString());
             outbox.setStatus(EmailOutboxStatus.PENDING);
             outbox.setMaxAttempts(5);
-            outbox.setPayload("{\"passNumber\":\"" + pass.getPassNumber() + "\",\"eventId\":\""
-                    + pass.getEvent().getId() + "\"}");
+            String catName = pass.getCategory() != null ? pass.getCategory().name() : "STUDENT";
+            String safeEventName = pass.getEvent() != null && pass.getEvent().getName() != null
+                    ? pass.getEvent().getName().replace("\"", "\\\"") : "";
+            String safeAttendeeName = attendee.getFullName() != null
+                    ? attendee.getFullName().replace("\"", "\\\"") : "";
+            outbox.setPayload(String.format(
+                    "{\"passNumber\":\"%s\",\"category\":\"%s\",\"eventId\":\"%s\",\"eventName\":\"%s\",\"attendeeName\":\"%s\"}",
+                    pass.getPassNumber(), catName, pass.getEvent().getId(), safeEventName, safeAttendeeName));
             emailOutboxRepository.save(outbox);
         } catch (Exception e) {
             // If the outbox write fails for any reason, log and continue.

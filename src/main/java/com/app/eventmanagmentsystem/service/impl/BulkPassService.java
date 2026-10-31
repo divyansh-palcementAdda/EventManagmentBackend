@@ -75,6 +75,18 @@ public class BulkPassService {
             Long fromSequence,
             Long toSequence,
             UUID dayId) {
+        return exportPasses(eventId, status, null, fromSequence, toSequence, dayId);
+    }
+
+    @PreAuthorize("hasAuthority('PASS_VIEW')")
+    @Transactional(readOnly = true)
+    public List<PassExportItemResponse> exportPasses(
+            UUID eventId,
+            PassStatus status,
+            PassCategory category,
+            Long fromSequence,
+            Long toSequence,
+            UUID dayId) {
 
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event", eventId.toString()));
@@ -91,6 +103,7 @@ public class BulkPassService {
         // Apply filters if needed
         return passes.stream()
                 .filter(p -> status == null || p.getStatus() == status)
+                .filter(p -> category == null || p.getCategory() == category)
                 .filter(p -> dayId == null || p.getValidDays().isEmpty() || p.getValidDays().stream().anyMatch(d -> d.getId().equals(dayId)))
                 .map(p -> toExportItem(p, event))
                 .collect(Collectors.toList());
@@ -119,6 +132,7 @@ public class BulkPassService {
                 .passId(pass.getId())
                 .passNumber(pass.getPassNumber())
                 .sequenceNumber(pass.getSequenceNumber())
+                .category(pass.getCategory())
                 .status(pass.getStatus())
                 .eventId(event.getId())
                 .eventName(event.getName())

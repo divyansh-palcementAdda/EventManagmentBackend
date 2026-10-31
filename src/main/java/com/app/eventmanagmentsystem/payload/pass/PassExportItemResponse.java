@@ -15,6 +15,7 @@ public class PassExportItemResponse {
     private final UUID passId;
     private final String passNumber;
     private final Long sequenceNumber;
+    private final com.app.eventmanagmentsystem.model.enums.PassCategory category;
     private final PassStatus status;
     private final UUID eventId;
     private final String eventName;

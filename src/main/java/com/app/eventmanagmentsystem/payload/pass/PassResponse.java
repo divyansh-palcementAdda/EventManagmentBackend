@@ -14,6 +14,7 @@ public class PassResponse {
     private final UUID id;
     private final String passNumber;
     private final Long sequenceNumber;
+    private final com.app.eventmanagmentsystem.model.enums.PassCategory category;
     private final PassStatus status;
     private final UUID eventId;
     private final String eventCode;

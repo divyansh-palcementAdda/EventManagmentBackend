@@ -34,5 +34,17 @@ public class ActivatePassRequest {
 
     @Size(max = 100)
     private String attendeeDesignation;
+
+    @Size(max = 150)
+    private String attendeeCollege;
+
+    @Size(max = 100)
+    private String attendeeCourse;
+
+    @Size(max = 50)
+    private String attendeeYearSemester;
+
+    @Size(max = 50)
+    private String attendeeStudentId;
 }
 

@@ -24,6 +24,10 @@ public class AttendeeResponse {
     private String mobileNumber;
     private String organization;
     private String designation;
+    private String college;
+    private String course;
+    private String yearSemester;
+    private String studentId;
     private RegistrationStatus registrationStatus;
     private Instant registeredAt;
 

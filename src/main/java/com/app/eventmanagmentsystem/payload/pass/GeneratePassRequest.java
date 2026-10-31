@@ -1,5 +1,6 @@
 package com.app.eventmanagmentsystem.payload.pass;
 
+import com.app.eventmanagmentsystem.model.enums.PassCategory;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -18,6 +19,9 @@ public class GeneratePassRequest {
     @Min(1)
     @Max(500)
     private int batchSize = 1;
+
+    /** Pass category: STUDENT or OTHER. Defaults to STUDENT. */
+    private PassCategory category = PassCategory.STUDENT;
 
     /** Optional client-supplied idempotency key (for batch-of-1 requests). */
     private String idempotencyKey;

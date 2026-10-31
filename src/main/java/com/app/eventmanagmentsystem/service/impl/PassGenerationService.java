@@ -8,6 +8,7 @@ import com.app.eventmanagmentsystem.model.EventDay;
 import com.app.eventmanagmentsystem.model.EventPass;
 import com.app.eventmanagmentsystem.model.enums.AuditOutcome;
 import com.app.eventmanagmentsystem.model.enums.EventStatus;
+import com.app.eventmanagmentsystem.model.enums.PassCategory;
 import com.app.eventmanagmentsystem.model.enums.PassStatus;
 import com.app.eventmanagmentsystem.payload.event.EventDayResponse;
 import com.app.eventmanagmentsystem.payload.pass.GeneratePassRequest;
@@ -84,7 +85,7 @@ public class PassGenerationService {
 
         List<PassResponse> results = new ArrayList<>(request.getBatchSize());
         for (int i = 0; i < request.getBatchSize(); i++) {
-            PassResponse passResponse = generateSinglePass(event, request.getIdempotencyKey(), i, permittedDays);
+            PassResponse passResponse = generateSinglePass(event, request.getIdempotencyKey(), i, permittedDays, request.getCategory());
             results.add(passResponse);
         }
 
@@ -112,7 +113,7 @@ public class PassGenerationService {
                 .collect(Collectors.toSet());
     }
 
-    private PassResponse generateSinglePass(Event event, String idempotencyKey, int batchIndex, Set<EventDay> permittedDays) {
+    private PassResponse generateSinglePass(Event event, String idempotencyKey, int batchIndex, Set<EventDay> permittedDays, PassCategory category) {
         // Increment sequence counter atomically within the locked transaction
         eventRepository.incrementPassSequenceCounter(event.getId());
         // Re-read the counter after increment
@@ -127,6 +128,7 @@ public class PassGenerationService {
         pass.setEvent(event);
         pass.setPassNumber(passNumber);
         pass.setSequenceNumber(sequence);
+        pass.setCategory(category != null ? category : PassCategory.STUDENT);
         pass.setTokenHash(tokenHash);
         pass.setStatus(PassStatus.NOT_ACTIVATED);
         pass.setGeneratedAt(Instant.now());
@@ -162,7 +164,7 @@ public class PassGenerationService {
     @PreAuthorize("hasAuthority('PASS_VIEW')")
     @Transactional(readOnly = true)
     public Page<PassResponse> listPassesByEvent(UUID eventId, Pageable pageable) {
-        return searchPassesByEvent(eventId, null, null, null, null, null, null, pageable);
+        return searchPassesByEvent(eventId, null, null, null, null, null, null, null, pageable);
     }
 
     @PreAuthorize("hasAuthority('PASS_VIEW')")
@@ -171,6 +173,21 @@ public class PassGenerationService {
             UUID eventId,
             String search,
             PassStatus status,
+            String checkInStatus,
+            UUID eventDayId,
+            Long fromSequence,
+            Long toSequence,
+            Pageable pageable) {
+        return searchPassesByEvent(eventId, search, status, null, checkInStatus, eventDayId, fromSequence, toSequence, pageable);
+    }
+
+    @PreAuthorize("hasAuthority('PASS_VIEW')")
+    @Transactional(readOnly = true)
+    public Page<PassResponse> searchPassesByEvent(
+            UUID eventId,
+            String search,
+            PassStatus status,
+            PassCategory category,
             String checkInStatus,
             UUID eventDayId,
             Long fromSequence,
@@ -193,7 +210,7 @@ public class PassGenerationService {
         }
 
         Specification<EventPass> spec = PassSpecification.filterPasses(
-                eventId, search, status, fromSequence, toSequence, eventDay, checkInStatus, checkedInPassIds);
+                eventId, search, status, category, fromSequence, toSequence, eventDay, checkInStatus, checkedInPassIds);
 
         Page<EventPass> page = passRepository.findAll(spec, pageable);
 
@@ -235,6 +252,7 @@ public class PassGenerationService {
                 .id(pass.getId())
                 .passNumber(pass.getPassNumber())
                 .sequenceNumber(pass.getSequenceNumber())
+                .category(pass.getCategory())
                 .status(pass.getStatus())
                 .eventId(event.getId())
                 .eventCode(event.getEventCode())
@@ -260,6 +278,7 @@ public class PassGenerationService {
                 .id(pass.getId())
                 .passNumber(pass.getPassNumber())
                 .sequenceNumber(pass.getSequenceNumber())
+                .category(pass.getCategory())
                 .status(pass.getStatus())
                 .eventId(pass.getEvent().getId())
                 .eventCode(pass.getEvent().getEventCode())
@@ -287,6 +306,7 @@ public class PassGenerationService {
                 .id(pass.getId())
                 .passNumber(pass.getPassNumber())
                 .sequenceNumber(pass.getSequenceNumber())
+                .category(pass.getCategory())
                 .status(pass.getStatus())
                 .eventId(pass.getEvent().getId())
                 .eventCode(pass.getEvent().getEventCode())

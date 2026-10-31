@@ -40,6 +40,18 @@ public class Attendee extends BaseEntity {
     @Column(name = "designation", length = 100)
     private String designation;
 
+    @Column(name = "college", length = 150)
+    private String college;
+
+    @Column(name = "course", length = 100)
+    private String course;
+
+    @Column(name = "year_semester", length = 50)
+    private String yearSemester;
+
+    @Column(name = "student_id", length = 50)
+    private String studentId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "registration_status", nullable = false, length = 30)
     private RegistrationStatus registrationStatus = RegistrationStatus.CONFIRMED;
