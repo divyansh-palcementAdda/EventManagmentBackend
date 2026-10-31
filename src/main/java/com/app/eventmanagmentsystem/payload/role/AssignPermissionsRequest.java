@@ -1,10 +1,11 @@
 package com.app.eventmanagmentsystem.payload.role;
 
-import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
 
@@ -13,7 +14,7 @@ import java.util.UUID;
 @AllArgsConstructor
 public class AssignPermissionsRequest {
 
-    @NotEmpty(message = "Permission IDs set cannot be empty")
-    private Set<UUID> permissionIds;
+    @NotNull(message = "Permission IDs set cannot be null")
+    private Set<UUID> permissionIds = Collections.emptySet();
 }
 

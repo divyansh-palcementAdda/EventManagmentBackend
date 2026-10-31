@@ -21,6 +21,9 @@ public class RoleResponse {
     private String description;
     private boolean systemDefined;
     private int userCount;
+    private int permissionCount;
+    private List<String> permissionNames;
+    private List<UUID> permissionIds;
     private List<PermissionResponse> permissions;
     private Instant createdAt;
     private Instant updatedAt;

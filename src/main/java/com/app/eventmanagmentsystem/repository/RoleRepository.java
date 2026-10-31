@@ -17,7 +17,7 @@ public interface RoleRepository extends JpaRepository<Role, UUID>, JpaSpecificat
 
     boolean existsByName(String name);
 
-    @Query("SELECT r FROM Role r JOIN FETCH r.permissions")
+    @Query("SELECT DISTINCT r FROM Role r LEFT JOIN FETCH r.permissions")
     List<Role> findAllWithPermissions();
 
     @Query("SELECT r FROM Role r LEFT JOIN FETCH r.permissions WHERE r.id = :id")

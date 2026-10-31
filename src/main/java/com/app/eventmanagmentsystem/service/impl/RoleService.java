@@ -172,11 +172,15 @@ public class RoleService {
     @PreAuthorize("hasAuthority('ROLE_UPDATE')")
     @Transactional
     public RoleResponse replacePermissions(UUID id, AssignPermissionsRequest request) {
-        Role role = roleRepository.findById(id)
+        Role role = roleRepository.findByIdWithPermissions(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Role", id.toString()));
 
-        List<Permission> permissions = permissionRepository.findAllById(request.getPermissionIds());
-        if (permissions.size() != request.getPermissionIds().size()) {
+        Set<UUID> requestedIds = request.getPermissionIds() != null ? request.getPermissionIds() : Collections.emptySet();
+        List<Permission> permissions = requestedIds.isEmpty()
+                ? Collections.emptyList()
+                : permissionRepository.findAllById(requestedIds);
+
+        if (permissions.size() != requestedIds.size()) {
             throw new InvalidRequestException("One or more permission IDs are invalid.");
         }
 
@@ -188,6 +192,24 @@ public class RoleService {
                 saved.getName(), AuditOutcome.SUCCESS, null, "Replaced with " + permissions.size() + " permissions");
 
         return toResponse(saved);
+    }
+
+    @PreAuthorize("hasAuthority('ROLE_VIEW')")
+    @Transactional(readOnly = true)
+    public List<PermissionResponse> getRolePermissions(UUID id) {
+        Role role = roleRepository.findByIdWithPermissions(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Role", id.toString()));
+
+        return (role.getPermissions() != null ? role.getPermissions().stream() : java.util.stream.Stream.<Permission>empty())
+                .sorted(Comparator.comparing(Permission::getName))
+                .map(p -> PermissionResponse.builder()
+                        .id(p.getId())
+                        .name(p.getName())
+                        .description(p.getDescription())
+                        .resource(p.getResource())
+                        .action(p.getAction())
+                        .build())
+                .collect(Collectors.toList());
     }
 
     @PreAuthorize("hasAuthority('ROLE_UPDATE')")
@@ -229,7 +251,7 @@ public class RoleService {
 
     public RoleResponse toResponse(Role role) {
         int userCount = userRepository.countUsersByRoleId(role.getId());
-        List<PermissionResponse> permissionResponses = role.getPermissions().stream()
+        List<PermissionResponse> permissionResponses = (role.getPermissions() != null ? role.getPermissions().stream() : java.util.stream.Stream.<Permission>empty())
                 .sorted(Comparator.comparing(Permission::getName))
                 .map(p -> PermissionResponse.builder()
                         .id(p.getId())
@@ -240,12 +262,23 @@ public class RoleService {
                         .build())
                 .collect(Collectors.toList());
 
+        List<String> permissionNames = permissionResponses.stream()
+                .map(PermissionResponse::getName)
+                .collect(Collectors.toList());
+
+        List<UUID> permissionIds = permissionResponses.stream()
+                .map(PermissionResponse::getId)
+                .collect(Collectors.toList());
+
         return RoleResponse.builder()
                 .id(role.getId())
                 .name(role.getName())
                 .description(role.getDescription())
                 .systemDefined(role.isSystemDefined())
                 .userCount(userCount)
+                .permissionCount(permissionResponses.size())
+                .permissionNames(permissionNames)
+                .permissionIds(permissionIds)
                 .permissions(permissionResponses)
                 .createdAt(role.getCreatedAt())
                 .updatedAt(role.getUpdatedAt())

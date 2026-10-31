@@ -169,7 +169,20 @@ class UserRolePermissionAttendeeTest {
         assertThat(customRole.getId()).isNotNull();
         assertThat(customRole.getPermissions()).extracting(PermissionResponse::getName)
                 .contains("USER_VIEW", "EVENT_VIEW");
+        assertThat(customRole.getPermissionNames()).contains("USER_VIEW", "EVENT_VIEW");
+        assertThat(customRole.getPermissionIds()).contains(p1.getId(), p2.getId());
+        assertThat(customRole.getPermissionCount()).isEqualTo(2);
         assertThat(customRole.isSystemDefined()).isFalse();
+
+        // Replace permissions
+        AssignPermissionsRequest replaceReq = new AssignPermissionsRequest(Set.of(p1.getId()));
+        RoleResponse replacedRole = roleService.replacePermissions(customRole.getId(), replaceReq);
+        assertThat(replacedRole.getPermissionNames()).containsExactly("USER_VIEW");
+        assertThat(replacedRole.getPermissionCount()).isEqualTo(1);
+
+        // Get permissions by role ID
+        List<PermissionResponse> rolePerms = roleService.getRolePermissions(customRole.getId());
+        assertThat(rolePerms).extracting(PermissionResponse::getName).containsExactly("USER_VIEW");
 
         // System role deletion must fail
         assertThatThrownBy(() -> roleService.deleteRole(superAdminRole.getId()))

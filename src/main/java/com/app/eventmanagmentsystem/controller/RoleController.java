@@ -1,6 +1,7 @@
 package com.app.eventmanagmentsystem.controller;
 
 import com.app.eventmanagmentsystem.payload.ApiResponse;
+import com.app.eventmanagmentsystem.payload.permission.PermissionResponse;
 import com.app.eventmanagmentsystem.payload.role.AssignPermissionsRequest;
 import com.app.eventmanagmentsystem.payload.role.CreateRoleRequest;
 import com.app.eventmanagmentsystem.payload.role.RoleResponse;
@@ -76,6 +77,13 @@ public class RoleController {
             @Parameter(description = "Role UUID") @PathVariable UUID id) {
         roleService.deleteRole(id);
         return ResponseEntity.ok(ApiResponse.success("Role deleted successfully"));
+    }
+
+    @Operation(summary = "Get permissions for role", description = "Retrieves all permissions currently assigned to a role. Requires ROLE_VIEW permission.")
+    @GetMapping("/{id}/permissions")
+    public ResponseEntity<ApiResponse<List<PermissionResponse>>> getRolePermissions(
+            @Parameter(description = "Role UUID") @PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.success(roleService.getRolePermissions(id)));
     }
 
     @Operation(summary = "Add permissions to role", description = "Appends permissions to an existing role. Requires ROLE_UPDATE permission.")
