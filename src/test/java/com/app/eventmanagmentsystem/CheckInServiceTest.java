@@ -64,12 +64,16 @@ class CheckInServiceTest {
     private PassActivationService passActivationService;
 
     @Autowired
+    private EventPassRepository passRepository;
+
+    @Autowired
     private CheckInService checkInService;
 
     private Event testEvent;
     private Event otherEvent;
     private User gatekeeperUser;
     private User unauthorizedUser;
+    private User superAdminUser;
 
     @BeforeEach
     void setUp() {
@@ -86,6 +90,14 @@ class CheckInServiceTest {
         gatekeeperRole.setPermissions(perms);
         roleRepository.saveAndFlush(gatekeeperRole);
 
+        Role superAdminRole = roleRepository.findByName("SUPER_ADMIN")
+                .orElseGet(() -> roleRepository.save(new Role("SUPER_ADMIN", "Super Admin", true)));
+        Set<Permission> saPerms = new HashSet<>(superAdminRole.getPermissions());
+        saPerms.add(scanPerm);
+        saPerms.add(passGenPerm);
+        superAdminRole.setPermissions(saPerms);
+        roleRepository.saveAndFlush(superAdminRole);
+
         gatekeeperUser = userRepository.findByEmail("gatekeeper@eventpass.test").orElseGet(() -> {
             User u = new User();
             u.setEmail("gatekeeper@eventpass.test");
@@ -101,6 +113,15 @@ class CheckInServiceTest {
             u.setPasswordHash("hashed_pw");
             u.setFullName("Unassigned Staff");
             u.setRoles(Set.of(gatekeeperRole));
+            return userRepository.saveAndFlush(u);
+        });
+
+        superAdminUser = userRepository.findByEmail("superadmin@eventpass.test").orElseGet(() -> {
+            User u = new User();
+            u.setEmail("superadmin@eventpass.test");
+            u.setPasswordHash("hashed_pw");
+            u.setFullName("Super Administrator");
+            u.setRoles(Set.of(superAdminRole));
             return userRepository.saveAndFlush(u);
         });
 
@@ -222,7 +243,7 @@ class CheckInServiceTest {
     }
 
     @Test
-    @DisplayName("Check-in: wrong event pass rejected")
+    @DisplayName("Check-in: wrong event pass rejected with PassEventMismatchException")
     void passFromDifferentEventRejected() {
         authenticateAs(gatekeeperUser);
 
@@ -245,7 +266,145 @@ class CheckInServiceTest {
         ciReq.setRawToken(pass.getRawToken());
 
         assertThatThrownBy(() -> checkInService.performCheckIn(ciReq))
-                .isInstanceOf(InvalidQrTokenException.class);
+                .isInstanceOf(PassEventMismatchException.class);
+
+        assertThatThrownBy(() -> checkInService.verifyPass(ciReq))
+                .isInstanceOf(PassEventMismatchException.class);
+    }
+
+    @Test
+    @DisplayName("Check-in: SUPER_ADMIN can verify and check in pass without explicit gatekeeper assignment")
+    void superAdminCheckInWithoutEventAssignment() {
+        authenticateAs(superAdminUser);
+
+        // Verify superAdmin is NOT assigned to testEvent
+        assertThat(gatekeeperRepository.existsActiveAssignment(testEvent.getId(), superAdminUser.getId()))
+                .isFalse();
+
+        // 1. Generate pass
+        GeneratePassRequest genReq = new GeneratePassRequest();
+        genReq.setEventId(testEvent.getId());
+        genReq.setBatchSize(1);
+        PassResponse pass = passGenerationService.generatePasses(genReq).get(0);
+
+        // 2. Activate pass
+        ActivatePassRequest actReq = new ActivatePassRequest();
+        actReq.setEventId(testEvent.getId());
+        actReq.setRawToken(pass.getRawToken());
+        actReq.setAttendeeFullName("SuperAdmin Attendee");
+        actReq.setAttendeeEmail("sa_att@example.com");
+        actReq.setAttendeeCollege("MIT");
+        actReq.setAttendeeCourse("Computer Science");
+        passActivationService.activatePass(actReq);
+
+        // 3. Verify pass via verifyPass
+        CheckInRequest verifyReq = new CheckInRequest();
+        verifyReq.setEventId(testEvent.getId());
+        verifyReq.setRawToken(pass.getRawToken());
+
+        var verifyRes = checkInService.verifyPass(verifyReq);
+        assertThat(verifyRes.isValid()).isTrue();
+        assertThat(verifyRes.isEligibleForCheckIn()).isTrue();
+        assertThat(verifyRes.getAttendeeName()).isEqualTo("SuperAdmin Attendee");
+
+        // 4. Perform check-in
+        CheckInResponse ciRes = checkInService.performCheckIn(verifyReq);
+        assertThat(ciRes.getCheckInId()).isNotNull();
+        assertThat(ciRes.getAttendeeName()).isEqualTo("SuperAdmin Attendee");
+        assertThat(ciRes.getCheckedInByName()).isEqualTo("Super Administrator");
+    }
+
+    @Test
+    @DisplayName("Check-in: SUPER_ADMIN can check in passes across multiple distinct events")
+    void superAdminMultiEventCheckIn() {
+        authenticateAs(superAdminUser);
+
+        // Neither event has gatekeeper assignment for superAdmin
+        assertThat(gatekeeperRepository.existsActiveAssignment(testEvent.getId(), superAdminUser.getId())).isFalse();
+        assertThat(gatekeeperRepository.existsActiveAssignment(otherEvent.getId(), superAdminUser.getId())).isFalse();
+
+        // Event 1 pass
+        GeneratePassRequest gen1 = new GeneratePassRequest();
+        gen1.setEventId(testEvent.getId());
+        gen1.setBatchSize(1);
+        PassResponse pass1 = passGenerationService.generatePasses(gen1).get(0);
+
+        ActivatePassRequest act1 = new ActivatePassRequest();
+        act1.setEventId(testEvent.getId());
+        act1.setRawToken(pass1.getRawToken());
+        act1.setAttendeeFullName("Event 1 Guest");
+        act1.setAttendeeEmail("guest1@example.com");
+        act1.setAttendeeCollege("Harvard");
+        act1.setAttendeeCourse("Economics");
+        passActivationService.activatePass(act1);
+
+        CheckInRequest req1 = new CheckInRequest();
+        req1.setEventId(testEvent.getId());
+        req1.setRawToken(pass1.getRawToken());
+        CheckInResponse res1 = checkInService.performCheckIn(req1);
+        assertThat(res1.getCheckInId()).isNotNull();
+        assertThat(res1.getEventName()).isEqualTo(testEvent.getName());
+
+        // Event 2 pass
+        GeneratePassRequest gen2 = new GeneratePassRequest();
+        gen2.setEventId(otherEvent.getId());
+        gen2.setBatchSize(1);
+        PassResponse pass2 = passGenerationService.generatePasses(gen2).get(0);
+
+        ActivatePassRequest act2 = new ActivatePassRequest();
+        act2.setEventId(otherEvent.getId());
+        act2.setRawToken(pass2.getRawToken());
+        act2.setAttendeeFullName("Event 2 Guest");
+        act2.setAttendeeEmail("guest2@example.com");
+        act2.setAttendeeCollege("Oxford");
+        act2.setAttendeeCourse("Physics");
+        passActivationService.activatePass(act2);
+
+        CheckInRequest req2 = new CheckInRequest();
+        req2.setEventId(otherEvent.getId());
+        req2.setRawToken(pass2.getRawToken());
+        CheckInResponse res2 = checkInService.performCheckIn(req2);
+        assertThat(res2.getCheckInId()).isNotNull();
+        assertThat(res2.getEventName()).isEqualTo(otherEvent.getName());
+    }
+
+    @Test
+    @DisplayName("Check-in: revoked pass is rejected during verify and performCheckIn")
+    void revokedPassCheckInRejected() {
+        authenticateAs(gatekeeperUser);
+
+        GeneratePassRequest genReq = new GeneratePassRequest();
+        genReq.setEventId(testEvent.getId());
+        genReq.setBatchSize(1);
+        PassResponse pass = passGenerationService.generatePasses(genReq).get(0);
+
+        ActivatePassRequest actReq = new ActivatePassRequest();
+        actReq.setEventId(testEvent.getId());
+        actReq.setRawToken(pass.getRawToken());
+        actReq.setAttendeeFullName("Revoked User");
+        actReq.setAttendeeEmail("revoked@example.com");
+        actReq.setAttendeeCollege("MIT");
+        actReq.setAttendeeCourse("Science");
+        passActivationService.activatePass(actReq);
+
+        // Manually revoke the pass in repository
+        EventPass passEntity = passRepository.findById(pass.getId()).orElseThrow();
+        passEntity.setStatus(PassStatus.REVOKED);
+        passEntity.setRevocationReason("Violation of terms");
+        passRepository.saveAndFlush(passEntity);
+
+        CheckInRequest req = new CheckInRequest();
+        req.setEventId(testEvent.getId());
+        req.setRawToken(pass.getRawToken());
+
+        // verifyPass returns status REVOKED and eligibleForCheckIn = false
+        var verifyRes = checkInService.verifyPass(req);
+        assertThat(verifyRes.getStatus()).isEqualTo("REVOKED");
+        assertThat(verifyRes.isEligibleForCheckIn()).isFalse();
+
+        // performCheckIn throws PassRevokedException
+        assertThatThrownBy(() -> checkInService.performCheckIn(req))
+                .isInstanceOf(PassRevokedException.class);
     }
 
     @Test

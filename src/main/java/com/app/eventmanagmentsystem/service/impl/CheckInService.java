@@ -58,10 +58,8 @@ public class CheckInService {
     public CheckInVerificationResponse verifyPass(CheckInRequest request) {
         AppUserDetails actor = currentUser();
 
-        // 1. Verify gatekeeper is assigned to this event
-        if (!gatekeeperRepository.existsActiveAssignment(request.getEventId(), actor.getUserId())) {
-            throw new EventAccessDeniedException();
-        }
+        // 1. Authorize actor for this event (SUPER_ADMIN bypasses, GATEKEEPER requires active assignment)
+        validateCheckInAccess(request.getEventId(), actor);
 
         // 2. Resolve pass
         EventPass pass = passLookupUtil.findPass(request.getRawToken())
@@ -69,7 +67,9 @@ public class CheckInService {
 
         // 3. Ensure pass belongs to the requested event
         if (!pass.getEvent().getId().equals(request.getEventId())) {
-            throw new InvalidQrTokenException();
+            log.warn("Pass event mismatch: pass {} belongs to event {}, but verification requested for event {}",
+                    pass.getPassNumber(), pass.getEvent().getId(), request.getEventId());
+            throw new PassEventMismatchException();
         }
 
         Event event = pass.getEvent();
@@ -183,10 +183,8 @@ public class CheckInService {
     public CheckInResponse performCheckIn(CheckInRequest request) {
         AppUserDetails actor = currentUser();
 
-        // Verify gatekeeper is assigned to this event
-        if (!gatekeeperRepository.existsActiveAssignment(request.getEventId(), actor.getUserId())) {
-            throw new EventAccessDeniedException();
-        }
+        // Authorize actor for this event (SUPER_ADMIN bypasses, GATEKEEPER requires active assignment)
+        validateCheckInAccess(request.getEventId(), actor);
 
         // Lock pass row to prevent concurrent check-ins
         EventPass pass = passLookupUtil.findPassForUpdate(request.getRawToken())
@@ -194,7 +192,9 @@ public class CheckInService {
 
         // Ensure pass belongs to the requested event
         if (!pass.getEvent().getId().equals(request.getEventId())) {
-            throw new InvalidQrTokenException();
+            log.warn("Pass event mismatch: pass {} belongs to event {}, but check-in requested for event {}",
+                    pass.getPassNumber(), pass.getEvent().getId(), request.getEventId());
+            throw new PassEventMismatchException();
         }
 
         // State checks — must be done while holding the lock
@@ -298,6 +298,26 @@ public class CheckInService {
                 .filter(d -> d.getEventDate() != null && d.getEventDate().equals(today))
                 .findFirst()
                 .orElse(days.get(0));
+    }
+
+    private void validateCheckInAccess(UUID eventId, AppUserDetails actor) {
+        if (eventId == null || !eventRepository.existsById(eventId)) {
+            throw new ResourceNotFoundException("Event", String.valueOf(eventId));
+        }
+
+        // Global administrative bypass for SUPER_ADMIN
+        if (actor.isSuperAdmin() || actor.hasRole("SUPER_ADMIN")) {
+            log.info("Check-in access granted globally for SUPER_ADMIN: {} on event: {}",
+                    actor.getEmail(), eventId);
+            return;
+        }
+
+        // Ordinary gatekeeper scoped verification
+        if (!gatekeeperRepository.existsActiveAssignment(eventId, actor.getUserId())) {
+            log.warn("Check-in access denied: user {} does not have active gatekeeper assignment for event: {}",
+                    actor.getEmail(), eventId);
+            throw new EventAccessDeniedException();
+        }
     }
 
     private AppUserDetails currentUser() {
