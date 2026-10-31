@@ -22,12 +22,18 @@ public interface EventPassRepository extends JpaRepository<EventPass, UUID>, Jpa
     @Query("SELECT p FROM EventPass p WHERE p.tokenHash = :tokenHash")
     Optional<EventPass> findByTokenHash(@Param("tokenHash") String tokenHash);
 
+    Optional<EventPass> findByPassNumber(String passNumber);
+
     /**
      * Pessimistic write lock — used during activation to prevent concurrent state changes.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT p FROM EventPass p WHERE p.tokenHash = :tokenHash")
     Optional<EventPass> findByTokenHashForUpdate(@Param("tokenHash") String tokenHash);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM EventPass p WHERE p.passNumber = :passNumber")
+    Optional<EventPass> findByPassNumberForUpdate(@Param("passNumber") String passNumber);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT p FROM EventPass p WHERE p.id = :id")

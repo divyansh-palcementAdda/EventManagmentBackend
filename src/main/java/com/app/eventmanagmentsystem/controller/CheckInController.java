@@ -3,6 +3,7 @@ package com.app.eventmanagmentsystem.controller;
 import com.app.eventmanagmentsystem.payload.ApiResponse;
 import com.app.eventmanagmentsystem.payload.checkin.CheckInRequest;
 import com.app.eventmanagmentsystem.payload.checkin.CheckInResponse;
+import com.app.eventmanagmentsystem.payload.checkin.CheckInVerificationResponse;
 import com.app.eventmanagmentsystem.service.impl.CheckInService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -20,6 +21,17 @@ import org.springframework.web.bind.annotation.*;
 public class CheckInController {
 
     private final CheckInService checkInService;
+
+    @Operation(
+            summary = "Verify pass for check-in",
+            description = "Inspects pass status, attendee details, day validity, and check-in history without recording check-in. Requires CHECKIN_SCAN permission."
+    )
+    @PostMapping("/verify")
+    public ResponseEntity<ApiResponse<CheckInVerificationResponse>> verifyPass(
+            @Valid @RequestBody CheckInRequest request) {
+        CheckInVerificationResponse response = checkInService.verifyPass(request);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
 
     @Operation(
             summary = "Perform check-in entry scan",

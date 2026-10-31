@@ -3,12 +3,16 @@ package com.app.eventmanagmentsystem.service.impl;
 import com.app.eventmanagmentsystem.exceptions.*;
 import com.app.eventmanagmentsystem.model.*;
 import com.app.eventmanagmentsystem.model.enums.AuditOutcome;
+import com.app.eventmanagmentsystem.model.enums.CheckInPolicy;
 import com.app.eventmanagmentsystem.model.enums.PassStatus;
 import com.app.eventmanagmentsystem.payload.checkin.CheckInRequest;
 import com.app.eventmanagmentsystem.payload.checkin.CheckInResponse;
+import com.app.eventmanagmentsystem.payload.checkin.CheckInVerificationResponse;
+import com.app.eventmanagmentsystem.payload.event.EventDayResponse;
 import com.app.eventmanagmentsystem.repository.*;
 import com.app.eventmanagmentsystem.security.AppUserDetails;
 import com.app.eventmanagmentsystem.service.interfaces.AuditLogService;
+import com.app.eventmanagmentsystem.util.PassLookupUtil;
 import com.app.eventmanagmentsystem.util.QrTokenUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +26,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Transactional check-in service supporting multi-day event entry.
@@ -44,7 +50,133 @@ public class CheckInService {
     private final EventRepository eventRepository;
     private final EventDayRepository eventDayRepository;
     private final QrTokenUtil qrTokenUtil;
+    private final PassLookupUtil passLookupUtil;
     private final AuditLogService auditLogService;
+
+    @PreAuthorize("hasAuthority('CHECKIN_SCAN')")
+    @Transactional(readOnly = true)
+    public CheckInVerificationResponse verifyPass(CheckInRequest request) {
+        AppUserDetails actor = currentUser();
+
+        // 1. Verify gatekeeper is assigned to this event
+        if (!gatekeeperRepository.existsActiveAssignment(request.getEventId(), actor.getUserId())) {
+            throw new EventAccessDeniedException();
+        }
+
+        // 2. Resolve pass
+        EventPass pass = passLookupUtil.findPass(request.getRawToken())
+                .orElseThrow(InvalidQrTokenException::new);
+
+        // 3. Ensure pass belongs to the requested event
+        if (!pass.getEvent().getId().equals(request.getEventId())) {
+            throw new InvalidQrTokenException();
+        }
+
+        Event event = pass.getEvent();
+        EventDay eventDay = resolveEventDay(event, request.getEventDayId());
+
+        List<EventDayResponse> validDays = pass.getValidDays() != null && !pass.getValidDays().isEmpty()
+                ? pass.getValidDays().stream()
+                        .map(d -> EventDayResponse.builder()
+                                .id(d.getId())
+                                .dayNumber(d.getDayNumber())
+                                .eventDate(d.getEventDate())
+                                .label(d.getLabel())
+                                .build())
+                        .collect(Collectors.toList())
+                : eventDayRepository.findByEventIdOrderByDayNumberAsc(event.getId()).stream()
+                        .map(d -> EventDayResponse.builder()
+                                .id(d.getId())
+                                .dayNumber(d.getDayNumber())
+                                .eventDate(d.getEventDate())
+                                .label(d.getLabel())
+                                .build())
+                        .collect(Collectors.toList());
+
+        Attendee attendee = pass.getAttendee();
+        String attendeeName = attendee != null ? attendee.getFullName() : null;
+        String attendeeEmail = attendee != null ? attendee.getEmail() : null;
+        String attendeeOrg = attendee != null ? attendee.getOrganization() : null;
+        String attendeeDesig = attendee != null ? attendee.getDesignation() : null;
+        UUID attendeeId = attendee != null ? attendee.getId() : null;
+
+        CheckInVerificationResponse.CheckInVerificationResponseBuilder builder =
+                CheckInVerificationResponse.builder()
+                        .passId(pass.getId())
+                        .passNumber(pass.getPassNumber())
+                        .eventId(event.getId())
+                        .eventName(event.getName())
+                        .eventCode(event.getEventCode())
+                        .venue(event.getVenue())
+                        .eventDayId(eventDay.getId())
+                        .dayNumber(eventDay.getDayNumber())
+                        .eventDate(eventDay.getEventDate() != null ? eventDay.getEventDate().toString() : null)
+                        .eventDayLabel(eventDay.getLabel())
+                        .attendeeId(attendeeId)
+                        .attendeeName(attendeeName)
+                        .attendeeEmail(attendeeEmail)
+                        .attendeeOrganization(attendeeOrg)
+                        .attendeeDesignation(attendeeDesig)
+                        .validDays(validDays);
+
+        // Check REVOKED
+        if (pass.getStatus() == PassStatus.REVOKED) {
+            return builder
+                    .valid(false)
+                    .eligibleForCheckIn(false)
+                    .status("REVOKED")
+                    .message("Pass has been revoked: " + (pass.getRevocationReason() != null ? pass.getRevocationReason() : "Revoked by administrator"))
+                    .build();
+        }
+
+        // Check NOT_ACTIVATED
+        if (pass.getStatus() == PassStatus.NOT_ACTIVATED || attendee == null) {
+            return builder
+                    .valid(true)
+                    .eligibleForCheckIn(false)
+                    .status("NOT_ACTIVATED")
+                    .message("This pass has not been activated yet. The attendee must activate the pass before entry.")
+                    .build();
+        }
+
+        // Check Day validity
+        if (pass.getValidDays() != null && !pass.getValidDays().isEmpty()) {
+            boolean validForDay = pass.getValidDays().stream()
+                    .anyMatch(d -> d.getId().equals(eventDay.getId()));
+            if (!validForDay) {
+                return builder
+                        .valid(true)
+                        .eligibleForCheckIn(false)
+                        .status("NOT_VALID_TODAY")
+                        .message("Pass is not valid for " + eventDay.getLabel() + " (Day " + eventDay.getDayNumber() + ").")
+                        .build();
+            }
+        }
+
+        // Check Existing Check-In for this event day
+        Optional<CheckIn> existingCheckIn = checkInRepository.findByPassIdAndEventDayId(pass.getId(), eventDay.getId());
+        if (existingCheckIn.isPresent()) {
+            CheckIn ci = existingCheckIn.get();
+            return builder
+                    .valid(true)
+                    .eligibleForCheckIn(false)
+                    .status("ALREADY_CHECKED_IN")
+                    .alreadyCheckedIn(true)
+                    .checkedInAt(ci.getCheckedInAt())
+                    .checkedInByName(ci.getCheckedInByName())
+                    .message("Pass has already been checked in for " + eventDay.getLabel() + ".")
+                    .build();
+        }
+
+        // All checks passed!
+        return builder
+                .valid(true)
+                .eligibleForCheckIn(true)
+                .status("READY_FOR_CHECKIN")
+                .alreadyCheckedIn(false)
+                .message("Pass is valid and ready for check-in.")
+                .build();
+    }
 
     @PreAuthorize("hasAuthority('CHECKIN_SCAN')")
     @Transactional
@@ -56,10 +188,8 @@ public class CheckInService {
             throw new EventAccessDeniedException();
         }
 
-        String tokenHash = qrTokenUtil.hashToken(request.getRawToken());
-
         // Lock pass row to prevent concurrent check-ins
-        EventPass pass = passRepository.findByTokenHashForUpdate(tokenHash)
+        EventPass pass = passLookupUtil.findPassForUpdate(request.getRawToken())
                 .orElseThrow(InvalidQrTokenException::new);
 
         // Ensure pass belongs to the requested event
@@ -117,6 +247,10 @@ public class CheckInService {
                 request.getRequestId(),
                 "Pass checked in: " + pass.getPassNumber() + " for " + eventDay.getLabel());
 
+        return toCheckInResponse(saved, pass, attendee, eventDay, actor);
+    }
+
+    private CheckInResponse toCheckInResponse(CheckIn saved, EventPass pass, Attendee attendee, EventDay eventDay, AppUserDetails actor) {
         Event event = pass.getEvent();
         return CheckInResponse.builder()
                 .checkInId(saved.getId())
@@ -132,7 +266,7 @@ public class CheckInService {
                 .eventDate(eventDay.getEventDate() != null ? eventDay.getEventDate().toString() : null)
                 .eventDayLabel(eventDay.getLabel())
                 .checkedInAt(saved.getCheckedInAt())
-                .checkedInByName(actor.getFullName())
+                .checkedInByName(saved.getCheckedInByName() != null ? saved.getCheckedInByName() : actor.getFullName())
                 .build();
     }
 

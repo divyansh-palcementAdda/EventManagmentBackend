@@ -9,6 +9,7 @@ import com.app.eventmanagmentsystem.payload.pass.PassResponse;
 import com.app.eventmanagmentsystem.payload.pass.ValidatePassResponse;
 import com.app.eventmanagmentsystem.repository.*;
 import com.app.eventmanagmentsystem.service.interfaces.AuditLogService;
+import com.app.eventmanagmentsystem.util.PassLookupUtil;
 import com.app.eventmanagmentsystem.util.QrTokenUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,12 +50,12 @@ public class PassActivationService {
     private final EventDayRepository eventDayRepository;
     private final EmailOutboxRepository emailOutboxRepository;
     private final QrTokenUtil qrTokenUtil;
+    private final PassLookupUtil passLookupUtil;
     private final AuditLogService auditLogService;
 
     @Transactional(readOnly = true)
     public ValidatePassResponse validatePass(String rawToken) {
-        String tokenHash = qrTokenUtil.hashToken(rawToken);
-        EventPass pass = passRepository.findByTokenHash(tokenHash)
+        EventPass pass = passLookupUtil.findPass(rawToken)
                 .orElseThrow(InvalidQrTokenException::new);
 
         Event event = pass.getEvent();
@@ -121,10 +122,8 @@ public class PassActivationService {
 
     @Transactional
     public PassResponse activatePass(ActivatePassRequest request) {
-        String tokenHash = qrTokenUtil.hashToken(request.getRawToken());
-
         // Lock the pass row before any state checks
-        EventPass pass = passRepository.findByTokenHashForUpdate(tokenHash)
+        EventPass pass = passLookupUtil.findPassForUpdate(request.getRawToken())
                 .orElseThrow(InvalidQrTokenException::new);
 
         // Validate pass belongs to requested event
