@@ -115,7 +115,7 @@ class SecurityAndRbacTest {
     }
 
     @Test
-    @DisplayName("Auth: successful login returns JWT with dynamic permissions")
+    @DisplayName("Auth: successful login returns JWT with roles and roleId (no permissions)")
     void successfulLogin() {
         LoginRequest req = new LoginRequest();
         req.setEmail("admin-test@test.com");
@@ -124,7 +124,14 @@ class SecurityAndRbacTest {
         LoginResponse resp = authService.login(req);
         assertThat(resp.getAccessToken()).isNotBlank();
         assertThat(resp.getEmail()).isEqualTo("admin-test@test.com");
-        assertThat(resp.getPermissions()).contains("EVENT_VIEW", "EVENT_CREATE");
+        assertThat(resp.getRoles()).contains("EVENT_ADMIN");
+        assertThat(resp.getRoleId()).isNotNull();
+        assertThat(resp.getRoleName()).isEqualTo("EVENT_ADMIN");
+
+        // Verify JWT token claims do NOT contain permissions
+        var claims = jwtTokenProvider.parseAndValidate(resp.getAccessToken());
+        assertThat(claims.get("permissions")).isNull();
+        assertThat(claims.get("roles")).isNotNull();
     }
 
     @Test

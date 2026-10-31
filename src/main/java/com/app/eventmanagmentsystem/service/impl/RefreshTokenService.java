@@ -2,6 +2,7 @@ package com.app.eventmanagmentsystem.service.impl;
 
 import com.app.eventmanagmentsystem.exceptions.InvalidRequestException;
 import com.app.eventmanagmentsystem.model.RefreshToken;
+import com.app.eventmanagmentsystem.model.Role;
 import com.app.eventmanagmentsystem.model.User;
 import com.app.eventmanagmentsystem.payload.auth.LoginResponse;
 import com.app.eventmanagmentsystem.repository.RefreshTokenRepository;
@@ -97,19 +98,25 @@ public class RefreshTokenService {
         newRefreshToken.setExpiresAt(Instant.now().plusMillis(refreshTokenExpiryMs));
         refreshTokenRepository.save(newRefreshToken);
 
+        Role primaryRole = user.getRoles().isEmpty() ? null : user.getRoles().iterator().next();
+        UUID roleId = primaryRole != null ? primaryRole.getId() : null;
+        String roleName = primaryRole != null ? primaryRole.getName() : null;
+
         Set<String> roles = user.getRoles().stream()
-                .map(r -> r.getName())
+                .map(Role::getName)
                 .collect(Collectors.toSet());
 
-        Set<String> permissions = user.getRoles().stream()
-                .flatMap(r -> r.getPermissions().stream())
-                .map(p -> p.getName())
-                .collect(Collectors.toSet());
+        // Token claims: only roles and roleId (NO PERMISSIONS in JWT)
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("roles", roles);
+        if (roleId != null) {
+            claims.put("roleId", roleId.toString());
+        }
 
         String newAccessToken = jwtTokenProvider.generateAccessToken(
                 user.getId(),
                 user.getEmail(),
-                Map.of("permissions", permissions, "roles", roles)
+                claims
         );
 
         return LoginResponse.builder()
@@ -119,8 +126,9 @@ public class RefreshTokenService {
                 .userId(user.getId())
                 .email(user.getEmail())
                 .fullName(user.getFullName())
+                .roleId(roleId)
+                .roleName(roleName)
                 .roles(roles)
-                .permissions(permissions)
                 .build();
     }
 

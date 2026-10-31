@@ -2,6 +2,7 @@ package com.app.eventmanagmentsystem.service.impl;
 
 import com.app.eventmanagmentsystem.exceptions.InvalidRequestException;
 import com.app.eventmanagmentsystem.exceptions.ResourceNotFoundException;
+import com.app.eventmanagmentsystem.model.Role;
 import com.app.eventmanagmentsystem.model.User;
 import com.app.eventmanagmentsystem.model.enums.AuditOutcome;
 import com.app.eventmanagmentsystem.payload.auth.ChangePasswordRequest;
@@ -23,6 +24,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -54,19 +56,25 @@ public class AuthService {
         User user = userRepository.findById(userDetails.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("User", userDetails.getUserId().toString()));
 
+        Role primaryRole = user.getRoles().isEmpty() ? null : user.getRoles().iterator().next();
+        UUID roleId = primaryRole != null ? primaryRole.getId() : null;
+        String roleName = primaryRole != null ? primaryRole.getName() : null;
+
         Set<String> roles = user.getRoles().stream()
-                .map(r -> r.getName())
+                .map(Role::getName)
                 .collect(Collectors.toSet());
 
-        Set<String> permissions = user.getRoles().stream()
-                .flatMap(r -> r.getPermissions().stream())
-                .map(p -> p.getName())
-                .collect(Collectors.toSet());
+        // Token claims: only roles and roleId (NO PERMISSIONS in JWT)
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("roles", roles);
+        if (roleId != null) {
+            claims.put("roleId", roleId.toString());
+        }
 
         String accessToken = jwtTokenProvider.generateAccessToken(
                 user.getId(),
                 user.getEmail(),
-                Map.of("permissions", permissions, "roles", roles)
+                claims
         );
 
         String refreshToken = refreshTokenService.createRefreshToken(user);
@@ -81,8 +89,9 @@ public class AuthService {
                 .userId(user.getId())
                 .email(user.getEmail())
                 .fullName(user.getFullName())
+                .roleId(roleId)
+                .roleName(roleName)
                 .roles(roles)
-                .permissions(permissions)
                 .build();
     }
 

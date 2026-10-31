@@ -16,6 +16,8 @@ public class ErrorResponse {
     private final int status;
     private final String error;
     private final String message;
+    private String path;
+    private String correlationId;
     private Map<String, String> fieldErrors;
 
     public ErrorResponse(String error, String message, int status) {
@@ -23,5 +25,19 @@ public class ErrorResponse {
         this.message = message;
         this.status = status;
     }
-}
 
+    public ErrorResponse(String error, String message, int status, String path) {
+        this.error = error;
+        this.message = message;
+        this.status = status;
+        this.path = path;
+    }
+
+    public ErrorResponse(String error, String message, int status, String path, String correlationId) {
+        this.error = error;
+        this.message = message;
+        this.status = status;
+        this.path = path;
+        this.correlationId = correlationId;
+    }
+}
