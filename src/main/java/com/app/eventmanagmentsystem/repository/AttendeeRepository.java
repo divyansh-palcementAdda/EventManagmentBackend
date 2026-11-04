@@ -22,6 +22,10 @@ public interface AttendeeRepository extends JpaRepository<Attendee, UUID>, JpaSp
 
     Optional<Attendee> findByEventIdAndEmail(UUID eventId, String email);
 
+    default Optional<Attendee> findByEventIdAndEmailIgnoreCase(UUID eventId, String email) {
+        return findByEventIdAndEmail(eventId, email != null ? email.toLowerCase().trim() : null);
+    }
+
     @Query("SELECT COUNT(a) FROM Attendee a WHERE a.event.id = :eventId")
     long countByEventId(@Param("eventId") UUID eventId);
 

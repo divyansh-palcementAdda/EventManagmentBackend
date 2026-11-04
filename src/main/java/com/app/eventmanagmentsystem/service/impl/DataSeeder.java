@@ -103,7 +103,20 @@ public class DataSeeder implements ApplicationRunner {
         new String[]{"CHECKIN_VIEW",      "View check-in records",       "CHECKIN",    "VIEW"},
         new String[]{"REPORT_VIEW",       "View reports",                "REPORT",     "VIEW"},
         new String[]{"AUDIT_LOG_VIEW",    "View audit logs",             "AUDIT_LOG",  "VIEW"},
-        new String[]{"NOTIFICATION_VIEW", "View notifications",          "NOTIFICATION","VIEW"}
+        new String[]{"NOTIFICATION_VIEW", "View notifications",          "NOTIFICATION","VIEW"},
+        new String[]{"PASS_CATEGORY_VIEW", "View pass categories",        "PASS_CATEGORY","VIEW"},
+        new String[]{"PASS_CATEGORY_CREATE","Create pass categories",     "PASS_CATEGORY","CREATE"},
+        new String[]{"PASS_CATEGORY_UPDATE","Update pass categories",     "PASS_CATEGORY","UPDATE"},
+        new String[]{"PASS_CATEGORY_DISABLE","Disable pass categories",   "PASS_CATEGORY","DISABLE"},
+        new String[]{"EVENT_CATEGORY_VIEW","View event categories",       "EVENT_CATEGORY","VIEW"},
+        new String[]{"EVENT_CATEGORY_MANAGE","Manage event categories",   "EVENT_CATEGORY","MANAGE"},
+        new String[]{"REGISTRATION_FORM_VIEW","View registration forms",  "REGISTRATION_FORM","VIEW"},
+        new String[]{"REGISTRATION_FORM_CREATE","Create registration forms","REGISTRATION_FORM","CREATE"},
+        new String[]{"REGISTRATION_FORM_UPDATE","Update registration forms","REGISTRATION_FORM","UPDATE"},
+        new String[]{"REGISTRATION_FORM_PUBLISH","Publish registration forms","REGISTRATION_FORM","PUBLISH"},
+        new String[]{"WALKIN_VIEW",       "View walk-in records",        "WALKIN",     "VIEW"},
+        new String[]{"WALKIN_REGISTER",   "Register walk-in attendees",  "WALKIN",     "REGISTER"},
+        new String[]{"WALKIN_CHECKIN",    "Check in walk-in attendees",  "WALKIN",     "CHECKIN"}
     );
 
     // Role → list of permission names
@@ -112,17 +125,20 @@ public class DataSeeder implements ApplicationRunner {
         "EVENT_ADMIN", Set.of(
             "EVENT_VIEW","EVENT_CREATE","EVENT_UPDATE","EVENT_CANCEL",
             "GATEKEEPER_ASSIGN","GATEKEEPER_REMOVE",
-            "PASS_VIEW","PASS_GENERATE","PASS_REVOKE",
+            "PASS_VIEW","PASS_GENERATE","PASS_REVOKE","PASS_ACTIVATE",
             "ATTENDEE_VIEW","ATTENDEE_CREATE","ATTENDEE_UPDATE","ATTENDEE_DELETE","ATTENDEE_EXPORT",
-            "CHECKIN_VIEW","REPORT_VIEW","NOTIFICATION_VIEW"
+            "CHECKIN_VIEW","REPORT_VIEW","NOTIFICATION_VIEW",
+            "PASS_CATEGORY_VIEW","EVENT_CATEGORY_VIEW","EVENT_CATEGORY_MANAGE",
+            "REGISTRATION_FORM_VIEW","REGISTRATION_FORM_CREATE","REGISTRATION_FORM_UPDATE","REGISTRATION_FORM_PUBLISH",
+            "WALKIN_VIEW","WALKIN_REGISTER","WALKIN_CHECKIN"
         ),
         "GATEKEEPER", Set.of(
             "EVENT_VIEW","CHECKIN_SCAN","CHECKIN_VIEW",
-            "PASS_VIEW","ATTENDEE_VIEW"
+            "PASS_VIEW","ATTENDEE_VIEW","WALKIN_VIEW","WALKIN_CHECKIN"
         ),
         "VIEWER", Set.of(
             "EVENT_VIEW","PASS_VIEW","ATTENDEE_VIEW",
-            "CHECKIN_VIEW","REPORT_VIEW"
+            "CHECKIN_VIEW","REPORT_VIEW","PASS_CATEGORY_VIEW","EVENT_CATEGORY_VIEW","WALKIN_VIEW"
         )
     );
 

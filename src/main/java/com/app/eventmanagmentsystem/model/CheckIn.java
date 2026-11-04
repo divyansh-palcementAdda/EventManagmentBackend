@@ -42,8 +42,8 @@ public class CheckIn extends BaseEntity {
     @JoinColumn(name = "event_day_id", nullable = false, updatable = false)
     private EventDay eventDay;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "attendee_id", nullable = false, updatable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "attendee_id", updatable = false)
     private Attendee attendee;
 
     /** UUID string of the gatekeeper user who performed check-in. */

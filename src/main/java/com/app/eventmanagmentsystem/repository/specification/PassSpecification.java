@@ -25,6 +25,19 @@ public class PassSpecification {
             EventDay eventDay,
             String checkInStatus,
             Collection<UUID> checkedInPassIds) {
+        return filterPasses(eventId, search, status, category != null ? category.name() : null, fromSequence, toSequence, eventDay, checkInStatus, checkedInPassIds);
+    }
+
+    public static Specification<EventPass> filterPasses(
+            UUID eventId,
+            String search,
+            PassStatus status,
+            String categoryCode,
+            Long fromSequence,
+            Long toSequence,
+            EventDay eventDay,
+            String checkInStatus,
+            Collection<UUID> checkedInPassIds) {
 
         return (Root<EventPass> root, CriteriaQuery<?> query, CriteriaBuilder cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -56,9 +69,9 @@ public class PassSpecification {
                 predicates.add(cb.equal(root.get("status"), status));
             }
 
-            // 3b. Category filter
-            if (category != null) {
-                predicates.add(cb.equal(root.get("category"), category));
+            // 3b. Dynamic Category filter (supports "STUDENT", "OTHER", "VIP", etc.)
+            if (categoryCode != null && !categoryCode.trim().isEmpty() && !"ALL".equalsIgnoreCase(categoryCode.trim())) {
+                predicates.add(cb.equal(cb.upper(root.get("category")), categoryCode.trim().toUpperCase()));
             }
 
             // 4. Sequence range
@@ -71,7 +84,6 @@ public class PassSpecification {
 
             // 5. Specific Event Day filter
             if (eventDay != null) {
-                // Either explicitly in validDays OR validDays is empty (valid for all days)
                 Predicate inValidDays = cb.isMember(eventDay, root.get("validDays"));
                 Predicate emptyValidDays = cb.isEmpty(root.get("validDays"));
                 predicates.add(cb.or(inValidDays, emptyValidDays));
@@ -80,7 +92,7 @@ public class PassSpecification {
             // 6. Check-in status filter
             if ("CHECKED_IN".equalsIgnoreCase(checkInStatus)) {
                 if (checkedInPassIds == null || checkedInPassIds.isEmpty()) {
-                    predicates.add(cb.disjunction()); // No passes are checked in
+                    predicates.add(cb.disjunction());
                 } else {
                     predicates.add(root.get("id").in(checkedInPassIds));
                 }
@@ -94,4 +106,3 @@ public class PassSpecification {
         };
     }
 }
-

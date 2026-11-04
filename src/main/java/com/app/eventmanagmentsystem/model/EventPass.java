@@ -53,14 +53,37 @@ public class EventPass extends BaseEntity {
 
     /**
      * SHA-256 hex digest of the raw activation/QR token.
-     * Never store the raw token here.
+     * Never store the raw token here. Null for NO_QR_WALK_IN passes.
      */
-    @Column(name = "token_hash", nullable = false, unique = true, length = 64)
+    @Column(name = "token_hash", unique = true, length = 64)
     private String tokenHash;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "category", nullable = false, length = 20)
-    private PassCategory category = PassCategory.STUDENT;
+    @Column(name = "category", nullable = false, length = 50)
+    private String category = "STUDENT";
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    private com.app.eventmanagmentsystem.model.PassCategory passCategory;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "event_category_id")
+    private EventPassCategory eventCategory;
+
+    public void setCategory(com.app.eventmanagmentsystem.model.enums.PassCategory catEnum) {
+        this.category = catEnum != null ? catEnum.name() : "STUDENT";
+    }
+
+    public void setCategory(String category) {
+        this.category = category != null ? category : "STUDENT";
+    }
+
+    public com.app.eventmanagmentsystem.model.enums.PassCategory getCategoryEnum() {
+        try {
+            return com.app.eventmanagmentsystem.model.enums.PassCategory.valueOf(this.category);
+        } catch (Exception e) {
+            return com.app.eventmanagmentsystem.model.enums.PassCategory.STUDENT;
+        }
+    }
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)

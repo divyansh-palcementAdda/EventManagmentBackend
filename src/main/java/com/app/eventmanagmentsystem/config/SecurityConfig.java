@@ -92,6 +92,8 @@ public class SecurityConfig {
                     "/api/v1/auth/**",
                     "/api/v1/passes/activate",
                     "/api/v1/passes/activate/**",
+                    "/api/v1/passes/auto-activate",
+                    "/api/v1/passes/auto-activate/**",
                     "/api/v1/passes/validate",
                     "/api/v1/passes/validate/**",
                     "/actuator/health",

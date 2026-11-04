@@ -91,6 +91,20 @@ public class PassController {
                 return ResponseEntity.ok(ApiResponse.success("Pass activated successfully", response));
         }
 
+        @Operation(summary = "Auto-activate pass on scan", description = "Atomically activates a pass configured with SCAN_AUTO_ACTIVATE and NO_IDENTITY policy upon QR scan without attendee form.")
+        @ApiResponses({
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Pass auto-activated successfully"),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Invalid QR token or wrong event"),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "410", description = "Pass is revoked")
+        })
+        @SecurityRequirements
+        @PostMapping("/auto-activate")
+        public ResponseEntity<ApiResponse<PassResponse>> autoActivatePass(
+                        @Valid @RequestBody AutoActivatePassRequest request) {
+                PassResponse response = passActivationService.autoActivatePass(request);
+                return ResponseEntity.ok(ApiResponse.success("Pass auto-activated successfully", response));
+        }
+
         @Operation(summary = "List and search passes by event", description = "Retrieves paginated passes for an event with server-side search, filtering, and sorting. Requires PASS_VIEW permission.")
         @GetMapping("/event/{eventId}")
         public ResponseEntity<ApiResponse<Page<PassResponse>>> listPasses(

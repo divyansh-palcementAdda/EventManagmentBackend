@@ -103,7 +103,7 @@ public class BulkPassService {
         // Apply filters if needed
         return passes.stream()
                 .filter(p -> status == null || p.getStatus() == status)
-                .filter(p -> category == null || p.getCategory() == category)
+                .filter(p -> category == null || category.name().equalsIgnoreCase(p.getCategory()))
                 .filter(p -> dayId == null || p.getValidDays().isEmpty() || p.getValidDays().stream().anyMatch(d -> d.getId().equals(dayId)))
                 .map(p -> toExportItem(p, event))
                 .collect(Collectors.toList());

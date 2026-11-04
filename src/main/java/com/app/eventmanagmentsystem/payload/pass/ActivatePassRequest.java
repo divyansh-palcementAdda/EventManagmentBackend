@@ -1,28 +1,28 @@
 package com.app.eventmanagmentsystem.payload.pass;
 
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Getter
 @Setter
 public class ActivatePassRequest {
 
-    @NotBlank
+    @NotBlank(message = "Raw QR token is required")
     private String rawToken;
 
-    @NotNull
+    @NotNull(message = "Event ID is required")
     private UUID eventId;
 
-    @NotBlank
+    @NotBlank(message = "Attendee full name is required")
     @Size(max = 150)
     private String attendeeFullName;
 
-    @NotBlank
-    @Email
+    @NotBlank(message = "Attendee email is required")
+    @Email(message = "Invalid email format")
     @Size(max = 180)
     private String attendeeEmail;
 
@@ -46,5 +46,7 @@ public class ActivatePassRequest {
 
     @Size(max = 50)
     private String attendeeStudentId;
-}
 
+    /** Dynamic field answers key-value map from dynamic form */
+    private Map<String, Object> answers;
+}

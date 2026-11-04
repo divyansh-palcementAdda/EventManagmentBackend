@@ -40,7 +40,7 @@ public class AttendeeResponse {
     private String passNumber;
     private Long sequenceNumber;
     private String passStatus;
-    private PassCategory passCategory;
+    private String passCategory;
 
     // Check-in details
     private boolean checkedIn;
@@ -63,8 +63,25 @@ public class AttendeeResponse {
     }
 
     @JsonProperty("category")
-    public PassCategory getCategory() {
-        return passCategory;
+    public Object getCategory() {
+        if (passCategory != null) {
+            try {
+                return PassCategory.valueOf(passCategory);
+            } catch (Exception ignored) {
+                return passCategory;
+            }
+        }
+        return null;
+    }
+
+    public PassCategory getCategoryEnum() {
+        if (passCategory != null) {
+            try {
+                return PassCategory.valueOf(passCategory);
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
     }
 
     @JsonProperty("pass")
@@ -94,7 +111,7 @@ public class AttendeeResponse {
         private String passNumber;
         private Long sequenceNumber;
         private String status;
-        private PassCategory category;
+        private String category;
         private String token;
     }
 

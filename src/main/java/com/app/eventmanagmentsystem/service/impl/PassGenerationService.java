@@ -6,6 +6,7 @@ import com.app.eventmanagmentsystem.model.CheckIn;
 import com.app.eventmanagmentsystem.model.Event;
 import com.app.eventmanagmentsystem.model.EventDay;
 import com.app.eventmanagmentsystem.model.EventPass;
+import com.app.eventmanagmentsystem.model.EventPassCategory;
 import com.app.eventmanagmentsystem.model.enums.AuditOutcome;
 import com.app.eventmanagmentsystem.model.enums.EventStatus;
 import com.app.eventmanagmentsystem.model.enums.PassCategory;
@@ -13,10 +14,7 @@ import com.app.eventmanagmentsystem.model.enums.PassStatus;
 import com.app.eventmanagmentsystem.payload.event.EventDayResponse;
 import com.app.eventmanagmentsystem.payload.pass.GeneratePassRequest;
 import com.app.eventmanagmentsystem.payload.pass.PassResponse;
-import com.app.eventmanagmentsystem.repository.CheckInRepository;
-import com.app.eventmanagmentsystem.repository.EventDayRepository;
-import com.app.eventmanagmentsystem.repository.EventPassRepository;
-import com.app.eventmanagmentsystem.repository.EventRepository;
+import com.app.eventmanagmentsystem.repository.*;
 import com.app.eventmanagmentsystem.repository.specification.PassSpecification;
 import com.app.eventmanagmentsystem.service.interfaces.AuditLogService;
 import com.app.eventmanagmentsystem.util.QrTokenUtil;
@@ -56,6 +54,8 @@ public class PassGenerationService {
     private final EventDayRepository eventDayRepository;
     private final EventPassRepository passRepository;
     private final CheckInRepository checkInRepository;
+    private final PassCategoryRepository passCategoryRepository;
+    private final EventPassCategoryRepository eventPassCategoryRepository;
     private final QrTokenUtil qrTokenUtil;
     private final AuditLogService auditLogService;
     private final EntityManager entityManager;
@@ -83,9 +83,36 @@ public class PassGenerationService {
         // Resolve permitted event days
         Set<EventDay> permittedDays = resolvePermittedDays(event, request.getValidDayIds());
 
+        // Resolve dynamic pass category & event-category
+        EventPassCategory eventPassCat = null;
+        com.app.eventmanagmentsystem.model.PassCategory passCat = null;
+        String categoryCode = request.resolveCategoryCode();
+
+        if (request.getEventCategoryId() != null) {
+            eventPassCat = eventPassCategoryRepository.findById(request.getEventCategoryId())
+                    .orElseThrow(() -> new ResourceNotFoundException("EventPassCategory", request.getEventCategoryId().toString()));
+            passCat = eventPassCat.getPassCategory();
+            categoryCode = passCat != null ? passCat.getCode() : categoryCode;
+        } else if (categoryCode != null) {
+            passCat = passCategoryRepository.findByCodeIgnoreCase(categoryCode).orElse(null);
+            if (passCat != null) {
+                eventPassCat = eventPassCategoryRepository.findByEventIdAndPassCategoryId(event.getId(), passCat.getId()).orElse(null);
+            }
+        }
+
+        if (eventPassCat != null) {
+            if (!eventPassCat.isActive()) {
+                throw new InvalidRequestException("Category " + categoryCode + " is disabled for this event.");
+            }
+            if (eventPassCat.getActivationMode() == com.app.eventmanagmentsystem.model.enums.ActivationMode.NO_QR_WALK_IN) {
+                throw new InvalidRequestException("Cannot pre-generate passes for NO_QR_WALK_IN category. Walk-in passes are allocated during staff admission.");
+            }
+        }
+
         List<PassResponse> results = new ArrayList<>(request.getBatchSize());
         for (int i = 0; i < request.getBatchSize(); i++) {
-            PassResponse passResponse = generateSinglePass(event, request.getIdempotencyKey(), i, permittedDays, request.getCategory());
+            PassResponse passResponse = generateSinglePass(event, request.getIdempotencyKey(), i, permittedDays,
+                    categoryCode != null ? categoryCode : "STUDENT", passCat, eventPassCat);
             results.add(passResponse);
         }
 
@@ -113,7 +140,9 @@ public class PassGenerationService {
                 .collect(Collectors.toSet());
     }
 
-    private PassResponse generateSinglePass(Event event, String idempotencyKey, int batchIndex, Set<EventDay> permittedDays, PassCategory category) {
+    private PassResponse generateSinglePass(Event event, String idempotencyKey, int batchIndex,
+                                             Set<EventDay> permittedDays, String categoryCode,
+                                             com.app.eventmanagmentsystem.model.PassCategory passCategory, EventPassCategory eventCategory) {
         // Increment sequence counter atomically within the locked transaction
         eventRepository.incrementPassSequenceCounter(event.getId());
         // Re-read the counter after increment
@@ -121,14 +150,21 @@ public class PassGenerationService {
 
         String passNumber = formatPassNumber(event.getEventCode(), event.getPassSeriesCode(), sequence);
 
-        String rawToken = qrTokenUtil.generateRawToken();
-        String tokenHash = qrTokenUtil.hashToken(rawToken);
+        boolean qrRequired = eventCategory == null || eventCategory.isQrRequired();
+        String rawToken = null;
+        String tokenHash = null;
+        if (qrRequired) {
+            rawToken = qrTokenUtil.generateRawToken();
+            tokenHash = qrTokenUtil.hashToken(rawToken);
+        }
 
         EventPass pass = new EventPass();
         pass.setEvent(event);
         pass.setPassNumber(passNumber);
         pass.setSequenceNumber(sequence);
-        pass.setCategory(category != null ? category : PassCategory.STUDENT);
+        pass.setCategory(categoryCode != null ? categoryCode : "STUDENT");
+        pass.setPassCategory(passCategory);
+        pass.setEventCategory(eventCategory);
         pass.setTokenHash(tokenHash);
         pass.setStatus(PassStatus.NOT_ACTIVATED);
         pass.setGeneratedAt(Instant.now());
@@ -247,12 +283,18 @@ public class PassGenerationService {
         String attendeeName = pass.getAttendee() != null ? pass.getAttendee().getFullName() : null;
         String attendeeEmail = pass.getAttendee() != null ? pass.getAttendee().getEmail() : null;
         String attendeeMobile = pass.getAttendee() != null ? pass.getAttendee().getMobileNumber() : null;
+        String catName = pass.getPassCategory() != null ? pass.getPassCategory().getName() : pass.getCategory();
+        var actMode = pass.getEventCategory() != null ? pass.getEventCategory().getActivationMode() : com.app.eventmanagmentsystem.model.enums.ActivationMode.SELF_SERVICE;
+        boolean qrReq = pass.getEventCategory() == null || pass.getEventCategory().isQrRequired();
 
         return PassResponse.builder()
                 .id(pass.getId())
                 .passNumber(pass.getPassNumber())
                 .sequenceNumber(pass.getSequenceNumber())
                 .category(pass.getCategory())
+                .categoryName(catName)
+                .activationMode(actMode)
+                .qrRequired(qrReq)
                 .status(pass.getStatus())
                 .eventId(event.getId())
                 .eventCode(event.getEventCode())
@@ -273,12 +315,18 @@ public class PassGenerationService {
         String attendeeEmail = pass.getAttendee() != null ? pass.getAttendee().getEmail() : null;
         String attendeeMobile = pass.getAttendee() != null ? pass.getAttendee().getMobileNumber() : null;
         boolean isCheckedIn = checkInRepository.existsByPassId(pass.getId());
+        String catName = pass.getPassCategory() != null ? pass.getPassCategory().getName() : pass.getCategory();
+        var actMode = pass.getEventCategory() != null ? pass.getEventCategory().getActivationMode() : com.app.eventmanagmentsystem.model.enums.ActivationMode.SELF_SERVICE;
+        boolean qrReq = pass.getEventCategory() == null || pass.getEventCategory().isQrRequired();
 
         return PassResponse.builder()
                 .id(pass.getId())
                 .passNumber(pass.getPassNumber())
                 .sequenceNumber(pass.getSequenceNumber())
                 .category(pass.getCategory())
+                .categoryName(catName)
+                .activationMode(actMode)
+                .qrRequired(qrReq)
                 .status(pass.getStatus())
                 .eventId(pass.getEvent().getId())
                 .eventCode(pass.getEvent().getEventCode())
@@ -301,12 +349,18 @@ public class PassGenerationService {
         boolean isCheckedIn = checkIns != null && !checkIns.isEmpty();
         long count = checkIns != null ? checkIns.size() : 0L;
         Instant lastCheckIn = isCheckedIn ? checkIns.get(0).getCheckedInAt() : null;
+        String catName = pass.getPassCategory() != null ? pass.getPassCategory().getName() : pass.getCategory();
+        var actMode = pass.getEventCategory() != null ? pass.getEventCategory().getActivationMode() : com.app.eventmanagmentsystem.model.enums.ActivationMode.SELF_SERVICE;
+        boolean qrReq = pass.getEventCategory() == null || pass.getEventCategory().isQrRequired();
 
         return PassResponse.builder()
                 .id(pass.getId())
                 .passNumber(pass.getPassNumber())
                 .sequenceNumber(pass.getSequenceNumber())
                 .category(pass.getCategory())
+                .categoryName(catName)
+                .activationMode(actMode)
+                .qrRequired(qrReq)
                 .status(pass.getStatus())
                 .eventId(pass.getEvent().getId())
                 .eventCode(pass.getEvent().getEventCode())

@@ -94,7 +94,7 @@ public class CheckInService {
                         .collect(Collectors.toList());
 
         Attendee attendee = pass.getAttendee();
-        String attendeeName = attendee != null ? attendee.getFullName() : null;
+        String attendeeName = attendee != null ? attendee.getFullName() : (pass.getStatus() == PassStatus.ACTIVATED ? "No Identity (Auto-Activated)" : null);
         String attendeeEmail = attendee != null ? attendee.getEmail() : null;
         String attendeeOrg = attendee != null ? attendee.getOrganization() : null;
         String attendeeDesig = attendee != null ? attendee.getDesignation() : null;
@@ -130,7 +130,7 @@ public class CheckInService {
         }
 
         // Check NOT_ACTIVATED
-        if (pass.getStatus() == PassStatus.NOT_ACTIVATED || attendee == null) {
+        if (pass.getStatus() == PassStatus.NOT_ACTIVATED) {
             return builder
                     .valid(true)
                     .eligibleForCheckIn(false)
@@ -205,11 +205,7 @@ public class CheckInService {
             throw new PassNotActivatedException();
         }
 
-        // Attendee must be present (pass must be activated)
         Attendee attendee = pass.getAttendee();
-        if (attendee == null) {
-            throw new PassNotActivatedException();
-        }
 
         // Resolve EventDay
         EventDay eventDay = resolveEventDay(pass.getEvent(), request.getEventDayId());
@@ -256,9 +252,9 @@ public class CheckInService {
                 .checkInId(saved.getId())
                 .passId(pass.getId())
                 .passNumber(pass.getPassNumber())
-                .attendeeId(attendee.getId())
-                .attendeeName(attendee.getFullName())
-                .attendeeEmail(attendee.getEmail())
+                .attendeeId(attendee != null ? attendee.getId() : null)
+                .attendeeName(attendee != null ? attendee.getFullName() : "No Identity (Auto-Activated)")
+                .attendeeEmail(attendee != null ? attendee.getEmail() : null)
                 .eventId(event.getId())
                 .eventName(event.getName())
                 .eventDayId(eventDay.getId())
