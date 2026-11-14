@@ -212,6 +212,19 @@ public class BulkPassService {
             Long fromSequence,
             Long toSequence,
             List<UUID> selectedPassIds) {
+        return previewBulkActivation(eventId, file, selectionMode, null, fromSequence, toSequence, selectedPassIds);
+    }
+
+    @PreAuthorize("hasAuthority('PASS_VIEW')")
+    @Transactional(readOnly = true)
+    public BulkActivationPreviewResponse previewBulkActivation(
+            UUID eventId,
+            MultipartFile file,
+            String selectionMode,
+            String category,
+            Long fromSequence,
+            Long toSequence,
+            List<UUID> selectedPassIds) {
 
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event", eventId.toString()));
@@ -250,16 +263,36 @@ public class BulkPassService {
                 throw new InvalidRequestException("fromSequence cannot be greater than toSequence.");
             }
             targetPasses = passRepository.findByEventIdAndSequenceNumberBetweenOrderBySequenceNumberAsc(eventId, fromSequence, toSequence);
+            if (category != null && !category.isBlank() && !"ALL".equalsIgnoreCase(category)) {
+                targetPasses = targetPasses.stream()
+                        .filter(p -> category.equalsIgnoreCase(p.getCategory()) ||
+                                     (p.getPassCategory() != null && category.equalsIgnoreCase(p.getPassCategory().getCode())))
+                        .collect(Collectors.toList());
+            }
         } else if ("INDIVIDUAL".equals(effectiveMode)) {
             if (selectedPassIds == null || selectedPassIds.isEmpty()) {
                 throw new InvalidRequestException("selectedPassIds cannot be empty for INDIVIDUAL selection.");
             }
             targetPasses = passRepository.findByEventIdAndIdIn(eventId, selectedPassIds);
             targetPasses.sort(Comparator.comparing(p -> p.getSequenceNumber() != null ? p.getSequenceNumber() : 0L));
+            if (category != null && !category.isBlank() && !"ALL".equalsIgnoreCase(category)) {
+                targetPasses = targetPasses.stream()
+                        .filter(p -> category.equalsIgnoreCase(p.getCategory()) ||
+                                     (p.getPassCategory() != null && category.equalsIgnoreCase(p.getPassCategory().getCode())))
+                        .collect(Collectors.toList());
+            }
         } else { // AUTO mode: grab earliest unactivated passes or sequential passes
-            targetPasses = passRepository.findByEventIdAndStatusOrderBySequenceNumberAsc(eventId, PassStatus.NOT_ACTIVATED);
-            if (targetPasses.size() > parsedRows.size()) {
-                targetPasses = targetPasses.subList(0, parsedRows.size());
+            List<EventPass> unactivated = passRepository.findByEventIdAndStatusOrderBySequenceNumberAsc(eventId, PassStatus.NOT_ACTIVATED);
+            if (category != null && !category.isBlank() && !"ALL".equalsIgnoreCase(category)) {
+                unactivated = unactivated.stream()
+                        .filter(p -> category.equalsIgnoreCase(p.getCategory()) ||
+                                     (p.getPassCategory() != null && category.equalsIgnoreCase(p.getPassCategory().getCode())))
+                        .collect(Collectors.toList());
+            }
+            if (unactivated.size() > parsedRows.size()) {
+                targetPasses = unactivated.subList(0, parsedRows.size());
+            } else {
+                targetPasses = unactivated;
             }
         }
 

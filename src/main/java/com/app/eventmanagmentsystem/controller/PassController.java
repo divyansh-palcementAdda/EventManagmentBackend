@@ -188,12 +188,13 @@ public class PassController {
                         @Parameter(description = "Event UUID") @PathVariable UUID eventId,
                         @RequestParam("file") MultipartFile file,
                         @RequestParam(value = "selectionMode", defaultValue = "AUTO") String selectionMode,
+                        @RequestParam(value = "category", required = false) String category,
                         @RequestParam(value = "fromSequence", required = false) Long fromSequence,
                         @RequestParam(value = "toSequence", required = false) Long toSequence,
                         @RequestParam(value = "selectedPassIds", required = false) List<UUID> selectedPassIds) {
 
                 BulkActivationPreviewResponse preview = bulkPassService.previewBulkActivation(
-                                eventId, file, selectionMode, fromSequence, toSequence, selectedPassIds);
+                                eventId, file, selectionMode, category, fromSequence, toSequence, selectedPassIds);
                 return ResponseEntity.ok(ApiResponse.success(preview));
         }
 
