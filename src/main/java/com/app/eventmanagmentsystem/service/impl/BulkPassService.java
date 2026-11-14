@@ -75,7 +75,7 @@ public class BulkPassService {
             Long fromSequence,
             Long toSequence,
             UUID dayId) {
-        return exportPasses(eventId, status, null, fromSequence, toSequence, dayId);
+        return exportPasses(eventId, status, (String) null, fromSequence, toSequence, dayId);
     }
 
     @PreAuthorize("hasAuthority('PASS_VIEW')")
