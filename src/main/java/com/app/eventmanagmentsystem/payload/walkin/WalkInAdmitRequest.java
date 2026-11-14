@@ -22,7 +22,7 @@ public class WalkInAdmitRequest {
     /** If selecting an existing attendee, pass attendeeId. Otherwise new attendee is created. */
     private UUID existingAttendeeId;
 
-    @NotBlank(message = "Attendee Full Name is required")
+    /** Required only when category identity policy is COLLECT_IDENTITY */
     private String fullName;
 
     private String email;

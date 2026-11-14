@@ -8,6 +8,7 @@ import com.app.eventmanagmentsystem.model.*;
 import com.app.eventmanagmentsystem.model.enums.ActivationMode;
 import com.app.eventmanagmentsystem.model.enums.AuditOutcome;
 import com.app.eventmanagmentsystem.model.enums.EventStatus;
+import com.app.eventmanagmentsystem.model.enums.IdentityPolicy;
 import com.app.eventmanagmentsystem.model.enums.PassStatus;
 import com.app.eventmanagmentsystem.model.enums.RegistrationStatus;
 import com.app.eventmanagmentsystem.payload.walkin.WalkInAdmitRequest;
@@ -68,7 +69,8 @@ public class WalkInAdmissionService {
 
         // 4. Validate EventPassCategory
         EventPassCategory epc = eventPassCategoryRepository.findById(request.getEventCategoryId())
-                .orElseThrow(() -> new ResourceNotFoundException("EventPassCategory", request.getEventCategoryId().toString()));
+                .orElseThrow(() -> new ResourceNotFoundException("EventPassCategory",
+                        request.getEventCategoryId().toString()));
         if (!epc.getEvent().getId().equals(event.getId())) {
             throw new InvalidRequestException("Category does not belong to the selected event.");
         }
@@ -90,19 +92,34 @@ public class WalkInAdmissionService {
         Attendee attendee;
         if (request.getExistingAttendeeId() != null) {
             attendee = attendeeRepository.findById(request.getExistingAttendeeId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Attendee", request.getExistingAttendeeId().toString()));
+                    .orElseThrow(() -> new ResourceNotFoundException("Attendee",
+                            request.getExistingAttendeeId().toString()));
         } else {
+            if (epc.getIdentityPolicy() == IdentityPolicy.COLLECT_IDENTITY) {
+                if (request.getFullName() == null || request.getFullName().trim().isEmpty()) {
+                    throw new InvalidRequestException(
+                            "Attendee Full Name is required for categories requiring identity collection.");
+                }
+            }
+
             String email = request.getEmail() != null && !request.getEmail().isBlank()
-                    ? request.getEmail().trim().toLowerCase() : null;
+                    ? request.getEmail().trim().toLowerCase()
+                    : null;
 
             if (email != null && attendeeRepository.existsByEventAndEmail(event.getId(), email)) {
                 attendee = attendeeRepository.findByEventIdAndEmailIgnoreCase(event.getId(), email)
-                        .orElseThrow(() -> new InvalidRequestException("Attendee with email already exists for this event."));
+                        .orElseThrow(() -> new InvalidRequestException(
+                                "Attendee with email already exists for this event."));
             } else {
                 attendee = new Attendee();
                 attendee.setEvent(event);
-                attendee.setFullName(request.getFullName().trim());
-                attendee.setEmail(email != null ? email : "walkin-" + UUID.randomUUID().toString().substring(0, 8) + "@event.local");
+                String name = (request.getFullName() != null && !request.getFullName().trim().isEmpty())
+                        ? request.getFullName().trim()
+                        : (epc.getPassCategory() != null ? epc.getPassCategory().getName() + " Attendee"
+                                : "Walk-in Attendee");
+                attendee.setFullName(name);
+                attendee.setEmail(email != null ? email
+                        : "walkin-" + UUID.randomUUID().toString().substring(0, 8) + "@event.local");
                 attendee.setMobileNumber(request.getMobileNumber() != null ? request.getMobileNumber().trim() : null);
                 attendee.setOrganization(request.getOrganization() != null ? request.getOrganization().trim() : null);
                 attendee.setDesignation(request.getDesignation() != null ? request.getDesignation().trim() : null);

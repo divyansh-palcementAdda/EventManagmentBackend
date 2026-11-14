@@ -23,6 +23,9 @@ public class EventPassCategoryResponse {
     private UUID categoryId;
     private String categoryName;
     private String categoryCode;
+    private String passCategoryName;
+    private String passCategoryCode;
+    private UUID passCategoryId;
     private CategoryScope categoryScope;
     private boolean enabled;
     private ActivationMode activationMode;
