@@ -56,6 +56,8 @@ public class PassActivationService {
     private final QrTokenUtil qrTokenUtil;
     private final PassLookupUtil passLookupUtil;
     private final AuditLogService auditLogService;
+    private final WhatsAppOtpService whatsAppOtpService;
+    private final WhatsAppNotificationService whatsAppNotificationService;
 
     @Transactional(readOnly = true)
     public ValidatePassResponse validatePass(String rawToken) {
@@ -186,6 +188,15 @@ public class PassActivationService {
             formBuilderService.validateAnswersAgainstSchema(version, request.getAnswers());
         }
 
+        // If WhatsApp OTP verification is required, validate verification token
+        if (whatsAppOtpService.isOtpRequired(event.getId())) {
+            boolean verified = whatsAppOtpService.validateVerificationToken(
+                    request.getAttendeeMobileNumber(), request.getVerificationToken(), event.getId());
+            if (!verified) {
+                throw new InvalidRequestException("WhatsApp OTP verification is required for mobile number " + request.getAttendeeMobileNumber());
+            }
+        }
+
         // Prevent duplicate attendee-email per event
         String rawEmail = request.getAttendeeEmail();
         if ((rawEmail == null || rawEmail.isBlank()) && request.getAnswers() != null && request.getAnswers().containsKey("email")) {
@@ -270,6 +281,9 @@ public class PassActivationService {
 
         // Enqueue activation email
         enqueueActivationEmail(savedPass, savedAttendee);
+
+        // Enqueue WhatsApp pass activation confirmation (same transaction, independent of email)
+        whatsAppNotificationService.enqueuePassActivation(savedPass, savedAttendee);
 
         auditLogService.log("PASS_ACTIVATE", "EventPass", pass.getId().toString(),
                 event.getId().toString(), AuditOutcome.SUCCESS, null,

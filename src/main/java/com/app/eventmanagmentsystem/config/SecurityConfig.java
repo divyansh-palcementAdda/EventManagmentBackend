@@ -96,6 +96,7 @@ public class SecurityConfig {
                     "/api/v1/passes/auto-activate/**",
                     "/api/v1/passes/validate",
                     "/api/v1/passes/validate/**",
+                    "/api/v1/whatsapp/otp/**",
                     "/actuator/health",
                     "/v3/api-docs/**",
                     "/swagger-ui/**",

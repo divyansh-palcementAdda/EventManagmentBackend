@@ -49,4 +49,7 @@ public class ActivatePassRequest {
 
     /** Dynamic field answers key-value map from dynamic form */
     private Map<String, Object> answers;
+
+    /** Optional WhatsApp OTP verification token (validated if OTP verification toggle is ON) */
+    private String verificationToken;
 }

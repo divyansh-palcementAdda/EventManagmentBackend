@@ -116,7 +116,14 @@ public class DataSeeder implements ApplicationRunner {
         new String[]{"REGISTRATION_FORM_PUBLISH","Publish registration forms","REGISTRATION_FORM","PUBLISH"},
         new String[]{"WALKIN_VIEW",       "View walk-in records",        "WALKIN",     "VIEW"},
         new String[]{"WALKIN_REGISTER",   "Register walk-in attendees",  "WALKIN",     "REGISTER"},
-        new String[]{"WALKIN_CHECKIN",    "Check in walk-in attendees",  "WALKIN",     "CHECKIN"}
+        new String[]{"WALKIN_CHECKIN",    "Check in walk-in attendees",  "WALKIN",     "CHECKIN"},
+        new String[]{"WHATSAPP_CONFIG_VIEW",   "View WhatsApp settings",      "WHATSAPP",   "VIEW"},
+        new String[]{"WHATSAPP_CONFIG_MANAGE", "Manage WhatsApp settings",    "WHATSAPP",   "MANAGE"},
+        new String[]{"WHATSAPP_TEMPLATE_VIEW", "View WhatsApp templates",    "WHATSAPP",   "VIEW"},
+        new String[]{"WHATSAPP_TEMPLATE_MANAGE","Manage WhatsApp templates",  "WHATSAPP",   "MANAGE"},
+        new String[]{"WHATSAPP_MESSAGE_VIEW",  "View WhatsApp message logs",  "WHATSAPP",   "VIEW"},
+        new String[]{"WHATSAPP_MESSAGE_SEND",  "Send WhatsApp messages",      "WHATSAPP",   "SEND"},
+        new String[]{"WHATSAPP_MESSAGE_RETRY", "Retry WhatsApp messages",     "WHATSAPP",   "RETRY"}
     );
 
     // Role → list of permission names
@@ -130,7 +137,8 @@ public class DataSeeder implements ApplicationRunner {
             "CHECKIN_VIEW","REPORT_VIEW","NOTIFICATION_VIEW",
             "PASS_CATEGORY_VIEW","EVENT_CATEGORY_VIEW","EVENT_CATEGORY_MANAGE",
             "REGISTRATION_FORM_VIEW","REGISTRATION_FORM_CREATE","REGISTRATION_FORM_UPDATE","REGISTRATION_FORM_PUBLISH",
-            "WALKIN_VIEW","WALKIN_REGISTER","WALKIN_CHECKIN"
+            "WALKIN_VIEW","WALKIN_REGISTER","WALKIN_CHECKIN",
+            "WHATSAPP_CONFIG_VIEW","WHATSAPP_CONFIG_MANAGE","WHATSAPP_TEMPLATE_VIEW","WHATSAPP_TEMPLATE_MANAGE","WHATSAPP_MESSAGE_VIEW","WHATSAPP_MESSAGE_SEND","WHATSAPP_MESSAGE_RETRY"
         ),
         "GATEKEEPER", Set.of(
             "EVENT_VIEW","CHECKIN_SCAN","CHECKIN_VIEW",
