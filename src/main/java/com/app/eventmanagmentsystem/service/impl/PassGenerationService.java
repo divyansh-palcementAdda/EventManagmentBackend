@@ -7,6 +7,7 @@ import com.app.eventmanagmentsystem.model.Event;
 import com.app.eventmanagmentsystem.model.EventDay;
 import com.app.eventmanagmentsystem.model.EventPass;
 import com.app.eventmanagmentsystem.model.EventPassCategory;
+import com.app.eventmanagmentsystem.model.enums.ActivationMode;
 import com.app.eventmanagmentsystem.model.enums.AuditOutcome;
 import com.app.eventmanagmentsystem.model.enums.EventStatus;
 import com.app.eventmanagmentsystem.model.enums.PassCategory;
@@ -89,23 +90,31 @@ public class PassGenerationService {
         String categoryCode = request.resolveCategoryCode();
 
         if (request.getEventCategoryId() != null) {
-            eventPassCat = eventPassCategoryRepository.findById(request.getEventCategoryId())
-                    .orElseThrow(() -> new ResourceNotFoundException("EventPassCategory", request.getEventCategoryId().toString()));
-            passCat = eventPassCat.getPassCategory();
-            categoryCode = passCat != null ? passCat.getCode() : categoryCode;
-        } else if (categoryCode != null) {
-            passCat = passCategoryRepository.findByCodeIgnoreCase(categoryCode).orElse(null);
-            if (passCat != null) {
-                eventPassCat = eventPassCategoryRepository.findByEventIdAndPassCategoryId(event.getId(), passCat.getId()).orElse(null);
+            eventPassCat = eventPassCategoryRepository.findById(request.getEventCategoryId()).orElse(null);
+            if (eventPassCat != null) {
+                passCat = eventPassCat.getPassCategory();
+                categoryCode = passCat != null ? passCat.getCode() : categoryCode;
             }
+        }
+        if (eventPassCat == null && categoryCode != null) {
+            eventPassCat = eventPassCategoryRepository.findByEventIdAndCategoryCode(event.getId(), categoryCode).orElse(null);
+            if (eventPassCat != null && passCat == null) {
+                passCat = eventPassCat.getPassCategory();
+            }
+        }
+        if (passCat == null && categoryCode != null) {
+            passCat = passCategoryRepository.findByCodeIgnoreCase(categoryCode).orElse(null);
+            if (passCat != null && eventPassCat == null) {
+                eventPassCat = eventPassCategoryRepository.findByEventIdAndCategoryId(event.getId(), passCat.getId()).orElse(null);
+            }
+        }
+        if (categoryCode == null && passCat != null) {
+            categoryCode = passCat.getCode();
         }
 
         if (eventPassCat != null) {
             if (!eventPassCat.isActive()) {
                 throw new InvalidRequestException("Category " + categoryCode + " is disabled for this event.");
-            }
-            if (eventPassCat.getActivationMode() == com.app.eventmanagmentsystem.model.enums.ActivationMode.NO_QR_WALK_IN) {
-                throw new InvalidRequestException("Cannot pre-generate passes for NO_QR_WALK_IN category. Walk-in passes are allocated during staff admission.");
             }
         }
 
@@ -150,7 +159,12 @@ public class PassGenerationService {
 
         String passNumber = formatPassNumber(event.getEventCode(), event.getPassSeriesCode(), sequence);
 
-        boolean qrRequired = eventCategory == null || eventCategory.isQrRequired();
+        boolean qrRequired = true;
+        if (eventCategory != null) {
+            if (eventCategory.getActivationMode() == ActivationMode.NO_QR_WALK_IN || !eventCategory.isQrRequired()) {
+                qrRequired = false;
+            }
+        }
         String rawToken = null;
         String tokenHash = null;
         if (qrRequired) {
@@ -285,7 +299,9 @@ public class PassGenerationService {
         String attendeeMobile = pass.getAttendee() != null ? pass.getAttendee().getMobileNumber() : null;
         String catName = pass.getPassCategory() != null ? pass.getPassCategory().getName() : pass.getCategory();
         var actMode = pass.getEventCategory() != null ? pass.getEventCategory().getActivationMode() : com.app.eventmanagmentsystem.model.enums.ActivationMode.SELF_SERVICE;
-        boolean qrReq = pass.getEventCategory() == null || pass.getEventCategory().isQrRequired();
+        boolean qrReq = pass.getEventCategory() != null
+                ? (pass.getEventCategory().isQrRequired() && pass.getEventCategory().getActivationMode() != com.app.eventmanagmentsystem.model.enums.ActivationMode.NO_QR_WALK_IN)
+                : (pass.getTokenHash() != null);
 
         return PassResponse.builder()
                 .id(pass.getId())
@@ -317,7 +333,9 @@ public class PassGenerationService {
         boolean isCheckedIn = checkInRepository.existsByPassId(pass.getId());
         String catName = pass.getPassCategory() != null ? pass.getPassCategory().getName() : pass.getCategory();
         var actMode = pass.getEventCategory() != null ? pass.getEventCategory().getActivationMode() : com.app.eventmanagmentsystem.model.enums.ActivationMode.SELF_SERVICE;
-        boolean qrReq = pass.getEventCategory() == null || pass.getEventCategory().isQrRequired();
+        boolean qrReq = pass.getEventCategory() != null
+                ? (pass.getEventCategory().isQrRequired() && pass.getEventCategory().getActivationMode() != com.app.eventmanagmentsystem.model.enums.ActivationMode.NO_QR_WALK_IN)
+                : (pass.getTokenHash() != null);
 
         return PassResponse.builder()
                 .id(pass.getId())
@@ -351,7 +369,9 @@ public class PassGenerationService {
         Instant lastCheckIn = isCheckedIn ? checkIns.get(0).getCheckedInAt() : null;
         String catName = pass.getPassCategory() != null ? pass.getPassCategory().getName() : pass.getCategory();
         var actMode = pass.getEventCategory() != null ? pass.getEventCategory().getActivationMode() : com.app.eventmanagmentsystem.model.enums.ActivationMode.SELF_SERVICE;
-        boolean qrReq = pass.getEventCategory() == null || pass.getEventCategory().isQrRequired();
+        boolean qrReq = pass.getEventCategory() != null
+                ? (pass.getEventCategory().isQrRequired() && pass.getEventCategory().getActivationMode() != com.app.eventmanagmentsystem.model.enums.ActivationMode.NO_QR_WALK_IN)
+                : (pass.getTokenHash() != null);
 
         return PassResponse.builder()
                 .id(pass.getId())

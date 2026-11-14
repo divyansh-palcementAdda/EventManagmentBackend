@@ -6,10 +6,13 @@ import com.app.eventmanagmentsystem.model.*;
 import com.app.eventmanagmentsystem.model.enums.FieldType;
 import com.app.eventmanagmentsystem.payload.category.FormFieldDto;
 import com.app.eventmanagmentsystem.payload.category.FormSchemaResponse;
+import com.app.eventmanagmentsystem.payload.category.FormVersionResponse;
 import com.app.eventmanagmentsystem.payload.category.PublishFormVersionResponse;
 import com.app.eventmanagmentsystem.repository.*;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.TextNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -87,8 +90,23 @@ public class FormBuilderService {
             config.setVisible(dto.isVisible());
             config.setDisplayOrder(dto.getDisplayOrder() > 0 ? dto.getDisplayOrder() : order++);
             config.setDefaultValue(dto.getDefaultValue());
-            config.setValidationRules(dto.getValidationRules());
-            config.setOptions(dto.getOptions());
+
+            if (dto.getValidationRules() != null) {
+                if (dto.getValidationRules().isTextual()) {
+                    config.setValidationRules(dto.getValidationRules().asText());
+                } else {
+                    config.setValidationRules(dto.getValidationRules().toString());
+                }
+            } else {
+                config.setValidationRules(null);
+            }
+
+            if (dto.getOptions() != null && !dto.getOptions().isEmpty()) {
+                config.setOptions(String.join(", ", dto.getOptions()));
+            } else {
+                config.setOptions(null);
+            }
+
             config.setActive(dto.isActive());
             savedConfigs.add(formFieldConfigRepository.save(config));
         }
@@ -187,8 +205,24 @@ public class FormBuilderService {
     }
 
     @Transactional(readOnly = true)
-    public List<RegistrationFormVersion> getVersionHistory(UUID eventPassCategoryId) {
-        return registrationFormVersionRepository.findByEventPassCategoryIdOrderByVersionNumberDesc(eventPassCategoryId);
+    public List<FormVersionResponse> getVersionHistory(UUID eventPassCategoryId) {
+        List<RegistrationFormVersion> versions = registrationFormVersionRepository
+                .findByEventPassCategoryIdOrderByVersionNumberDesc(eventPassCategoryId);
+        return versions.stream().map(v -> {
+            List<FormFieldDto> fields = parseSchemaSnapshot(v.getSchemaSnapshot());
+            return FormVersionResponse.builder()
+                    .id(v.getId())
+                    .versionId(v.getId())
+                    .eventPassCategoryId(eventPassCategoryId)
+                    .versionNumber(v.getVersionNumber())
+                    .published(v.isPublished())
+                    .publishedAt(v.getCreatedAt())
+                    .createdAt(v.getCreatedAt())
+                    .fields(fields)
+                    .fieldCount(fields != null ? fields.size() : 0)
+                    .schemaSnapshot(v.getSchemaSnapshot())
+                    .build();
+        }).collect(Collectors.toList());
     }
 
     public List<FormFieldDto> parseSchemaSnapshot(String schemaJson) {
@@ -250,8 +284,8 @@ public class FormBuilderService {
                 break;
             case SELECT:
             case RADIO:
-                if (field.getOptions() != null && !field.getOptions().isBlank()) {
-                    List<String> validOptions = Arrays.stream(field.getOptions().split(","))
+                if (field.getOptions() != null && !field.getOptions().isEmpty()) {
+                    List<String> validOptions = field.getOptions().stream()
                             .map(String::trim)
                             .map(String::toLowerCase)
                             .collect(Collectors.toList());
@@ -290,6 +324,23 @@ public class FormBuilderService {
     }
 
     private FormFieldDto toDto(FormFieldConfig config) {
+        List<String> optionsList = null;
+        if (config.getOptions() != null && !config.getOptions().isBlank()) {
+            optionsList = Arrays.stream(config.getOptions().split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .collect(Collectors.toList());
+        }
+
+        JsonNode valRulesNode = null;
+        if (config.getValidationRules() != null && !config.getValidationRules().isBlank()) {
+            try {
+                valRulesNode = objectMapper.readTree(config.getValidationRules());
+            } catch (Exception e) {
+                valRulesNode = new TextNode(config.getValidationRules());
+            }
+        }
+
         return FormFieldDto.builder()
                 .id(config.getId())
                 .fieldKey(config.getFieldKey())
@@ -301,8 +352,8 @@ public class FormBuilderService {
                 .visible(config.isVisible())
                 .displayOrder(config.getDisplayOrder())
                 .defaultValue(config.getDefaultValue())
-                .validationRules(config.getValidationRules())
-                .options(config.getOptions())
+                .validationRules(valRulesNode)
+                .options(optionsList)
                 .active(config.isActive())
                 .build();
     }

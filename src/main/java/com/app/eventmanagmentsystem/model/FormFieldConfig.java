@@ -2,6 +2,7 @@ package com.app.eventmanagmentsystem.model;
 
 import com.app.eventmanagmentsystem.model.audit.BaseEntity;
 import com.app.eventmanagmentsystem.model.enums.FieldType;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -17,6 +18,7 @@ import lombok.Setter;
 @NoArgsConstructor
 public class FormFieldConfig extends BaseEntity {
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "event_pass_category_id", nullable = false)
     private EventPassCategory eventPassCategory;

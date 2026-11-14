@@ -1,9 +1,9 @@
 package com.app.eventmanagmentsystem.controller;
 
-import com.app.eventmanagmentsystem.model.RegistrationFormVersion;
 import com.app.eventmanagmentsystem.payload.ApiResponse;
 import com.app.eventmanagmentsystem.payload.category.FormFieldDto;
 import com.app.eventmanagmentsystem.payload.category.FormSchemaResponse;
+import com.app.eventmanagmentsystem.payload.category.FormVersionResponse;
 import com.app.eventmanagmentsystem.payload.category.PublishFormVersionResponse;
 import com.app.eventmanagmentsystem.service.impl.FormBuilderService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -71,9 +71,9 @@ public class FormBuilderController {
 
     @Operation(summary = "Get form version history", description = "Retrieves all published version snapshots for audit and historical records.")
     @GetMapping("/history")
-    public ResponseEntity<ApiResponse<List<RegistrationFormVersion>>> getVersionHistory(
+    public ResponseEntity<ApiResponse<List<FormVersionResponse>>> getVersionHistory(
             @Parameter(description = "Event Pass Category UUID") @PathVariable UUID eventCategoryId) {
-        List<RegistrationFormVersion> history = formBuilderService.getVersionHistory(eventCategoryId);
+        List<FormVersionResponse> history = formBuilderService.getVersionHistory(eventCategoryId);
         return ResponseEntity.ok(ApiResponse.success(history));
     }
 }

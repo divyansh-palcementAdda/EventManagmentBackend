@@ -337,4 +337,41 @@ class DynamicPassCategoryAndFormBuilderTest {
         assertThat(pass.getTokenHash()).isNull();
         assertThat(pass.getAttendee().getFullName()).isEqualTo("John WalkIn");
     }
+
+    @Test
+    @DisplayName("Generate passes for NO_QR_WALK_IN / badge category: generates pass numbers with null tokenHash")
+    void testPassGenerationForWalkInCategory() {
+        com.app.eventmanagmentsystem.model.PassCategory vipCat = passCategoryRepository.findByCode("VIP")
+                .orElseGet(() -> {
+                    var pc = new com.app.eventmanagmentsystem.model.PassCategory();
+                    pc.setName("VIP");
+                    pc.setCode("VIP");
+                    pc.setScope(CategoryScope.GLOBAL);
+                    pc.setActive(true);
+                    return passCategoryRepository.save(pc);
+                });
+
+        ConfigureEventCategoryRequest configReq = new ConfigureEventCategoryRequest();
+        configReq.setCategoryId(vipCat.getId());
+        configReq.setActivationMode(ActivationMode.NO_QR_WALK_IN);
+        configReq.setQrRequired(false);
+        configReq.setIdentityPolicy(IdentityPolicy.NO_IDENTITY);
+        configReq.setEnabled(true);
+
+        EventPassCategoryResponse epc = eventPassCategoryService.configureCategoryForEvent(testEvent.getId(), configReq);
+
+        GeneratePassRequest genReq = new GeneratePassRequest();
+        genReq.setEventId(testEvent.getId());
+        genReq.setBatchSize(3);
+        genReq.setCategoryCode("VIP");
+        genReq.setEventCategoryId(epc.getId());
+
+        List<PassResponse> passes = passGenerationService.generatePasses(genReq);
+        assertThat(passes).hasSize(3);
+        assertThat(passes.get(0).getCategory()).isEqualTo("VIP");
+
+        EventPass pass = eventPassRepository.findById(passes.get(0).getId()).orElseThrow();
+        assertThat(pass.getTokenHash()).isNull();
+        assertThat(pass.getPassNumber()).startsWith(testEvent.getEventCode());
+    }
 }

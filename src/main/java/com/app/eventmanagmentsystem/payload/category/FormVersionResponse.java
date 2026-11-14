@@ -1,0 +1,36 @@
+package com.app.eventmanagmentsystem.payload.category;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class FormVersionResponse {
+    private UUID id;
+    private UUID versionId;
+    private UUID eventPassCategoryId;
+    private int versionNumber;
+    private boolean published;
+    private int fieldCount;
+    private String changelog;
+    private Instant publishedAt;
+    private Instant createdAt;
+    private List<FormFieldDto> fields;
+    private String schemaSnapshot;
+
+    public UUID getVersionId() {
+        return versionId != null ? versionId : id;
+    }
+
+    public Instant getPublishedAt() {
+        return publishedAt != null ? publishedAt : createdAt;
+    }
+}
