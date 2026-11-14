@@ -23,6 +23,8 @@ public class PassExportItemResponse {
     private Long sequenceNumber;
     private String category;
     private String categoryName;
+    private String activationMode;
+    private Boolean qrRequired;
     private PassStatus status;
     private UUID eventId;
     private String eventName;

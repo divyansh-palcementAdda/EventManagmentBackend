@@ -164,6 +164,8 @@ public class PassGenerationService {
             if (eventCategory.getActivationMode() == ActivationMode.NO_QR_WALK_IN || !eventCategory.isQrRequired()) {
                 qrRequired = false;
             }
+        } else if ("VIP".equalsIgnoreCase(categoryCode)) {
+            qrRequired = false;
         }
         String rawToken = null;
         String tokenHash = null;
@@ -243,6 +245,21 @@ public class PassGenerationService {
             Long fromSequence,
             Long toSequence,
             Pageable pageable) {
+        return searchPassesByEvent(eventId, search, status, category != null ? category.name() : null, checkInStatus, eventDayId, fromSequence, toSequence, pageable);
+    }
+
+    @PreAuthorize("hasAuthority('PASS_VIEW')")
+    @Transactional(readOnly = true)
+    public Page<PassResponse> searchPassesByEvent(
+            UUID eventId,
+            String search,
+            PassStatus status,
+            String categoryCode,
+            String checkInStatus,
+            UUID eventDayId,
+            Long fromSequence,
+            Long toSequence,
+            Pageable pageable) {
 
         if (!eventRepository.existsById(eventId)) {
             throw new ResourceNotFoundException("Event", eventId.toString());
@@ -260,7 +277,7 @@ public class PassGenerationService {
         }
 
         Specification<EventPass> spec = PassSpecification.filterPasses(
-                eventId, search, status, category, fromSequence, toSequence, eventDay, checkInStatus, checkedInPassIds);
+                eventId, search, status, categoryCode, fromSequence, toSequence, eventDay, checkInStatus, checkedInPassIds);
 
         Page<EventPass> page = passRepository.findAll(spec, pageable);
 
@@ -301,7 +318,7 @@ public class PassGenerationService {
         var actMode = pass.getEventCategory() != null ? pass.getEventCategory().getActivationMode() : com.app.eventmanagmentsystem.model.enums.ActivationMode.SELF_SERVICE;
         boolean qrReq = pass.getEventCategory() != null
                 ? (pass.getEventCategory().isQrRequired() && pass.getEventCategory().getActivationMode() != com.app.eventmanagmentsystem.model.enums.ActivationMode.NO_QR_WALK_IN)
-                : (pass.getTokenHash() != null);
+                : (pass.getTokenHash() != null && !"VIP".equalsIgnoreCase(pass.getCategory()));
 
         return PassResponse.builder()
                 .id(pass.getId())
@@ -335,7 +352,7 @@ public class PassGenerationService {
         var actMode = pass.getEventCategory() != null ? pass.getEventCategory().getActivationMode() : com.app.eventmanagmentsystem.model.enums.ActivationMode.SELF_SERVICE;
         boolean qrReq = pass.getEventCategory() != null
                 ? (pass.getEventCategory().isQrRequired() && pass.getEventCategory().getActivationMode() != com.app.eventmanagmentsystem.model.enums.ActivationMode.NO_QR_WALK_IN)
-                : (pass.getTokenHash() != null);
+                : (pass.getTokenHash() != null && !"VIP".equalsIgnoreCase(pass.getCategory()));
 
         return PassResponse.builder()
                 .id(pass.getId())
@@ -371,7 +388,7 @@ public class PassGenerationService {
         var actMode = pass.getEventCategory() != null ? pass.getEventCategory().getActivationMode() : com.app.eventmanagmentsystem.model.enums.ActivationMode.SELF_SERVICE;
         boolean qrReq = pass.getEventCategory() != null
                 ? (pass.getEventCategory().isQrRequired() && pass.getEventCategory().getActivationMode() != com.app.eventmanagmentsystem.model.enums.ActivationMode.NO_QR_WALK_IN)
-                : (pass.getTokenHash() != null);
+                : (pass.getTokenHash() != null && !"VIP".equalsIgnoreCase(pass.getCategory()));
 
         return PassResponse.builder()
                 .id(pass.getId())

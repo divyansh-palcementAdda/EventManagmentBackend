@@ -87,6 +87,18 @@ public class BulkPassService {
             Long fromSequence,
             Long toSequence,
             UUID dayId) {
+        return exportPasses(eventId, status, category != null ? category.name() : null, fromSequence, toSequence, dayId);
+    }
+
+    @PreAuthorize("hasAuthority('PASS_VIEW')")
+    @Transactional(readOnly = true)
+    public List<PassExportItemResponse> exportPasses(
+            UUID eventId,
+            PassStatus status,
+            String category,
+            Long fromSequence,
+            Long toSequence,
+            UUID dayId) {
 
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event", eventId.toString()));
@@ -103,7 +115,9 @@ public class BulkPassService {
         // Apply filters if needed
         return passes.stream()
                 .filter(p -> status == null || p.getStatus() == status)
-                .filter(p -> category == null || category.name().equalsIgnoreCase(p.getCategory()))
+                .filter(p -> category == null || category.isBlank() || "ALL".equalsIgnoreCase(category)
+                        || category.equalsIgnoreCase(p.getCategory())
+                        || (p.getPassCategory() != null && category.equalsIgnoreCase(p.getPassCategory().getCode())))
                 .filter(p -> dayId == null || p.getValidDays().isEmpty() || p.getValidDays().stream().anyMatch(d -> d.getId().equals(dayId)))
                 .map(p -> toExportItem(p, event))
                 .collect(Collectors.toList());
@@ -125,14 +139,23 @@ public class BulkPassService {
                                 .build())
                         .collect(Collectors.toList());
 
+        String catName = pass.getPassCategory() != null ? pass.getPassCategory().getName() : pass.getCategory();
+        var actMode = pass.getEventCategory() != null ? pass.getEventCategory().getActivationMode() : com.app.eventmanagmentsystem.model.enums.ActivationMode.SELF_SERVICE;
+        boolean qrReq = pass.getEventCategory() != null
+                ? (pass.getEventCategory().isQrRequired() && pass.getEventCategory().getActivationMode() != com.app.eventmanagmentsystem.model.enums.ActivationMode.NO_QR_WALK_IN)
+                : (pass.getTokenHash() != null && !"VIP".equalsIgnoreCase(pass.getCategory()));
+
         // Standard QR data payload pointing to pass activation / inspection
-        String qrData = pass.getPassNumber();
+        String qrData = qrReq ? pass.getPassNumber() : null;
 
         return PassExportItemResponse.builder()
                 .passId(pass.getId())
                 .passNumber(pass.getPassNumber())
                 .sequenceNumber(pass.getSequenceNumber())
                 .category(pass.getCategory())
+                .categoryName(catName)
+                .activationMode(actMode != null ? actMode.name() : null)
+                .qrRequired(qrReq)
                 .status(pass.getStatus())
                 .eventId(event.getId())
                 .eventName(event.getName())

@@ -111,7 +111,7 @@ public class PassController {
                         @Parameter(description = "Event UUID") @PathVariable UUID eventId,
                         @Parameter(description = "Search query by pass #, sequence, attendee name or email") @RequestParam(required = false) String search,
                         @Parameter(description = "Pass status filter") @RequestParam(required = false) PassStatus status,
-                        @Parameter(description = "Pass category filter: STUDENT, OTHER") @RequestParam(required = false) PassCategory category,
+                        @Parameter(description = "Pass category filter: STUDENT, OTHER, VIP, etc.") @RequestParam(required = false) String category,
                         @Parameter(description = "Check-in status: ALL, CHECKED_IN, NOT_CHECKED_IN") @RequestParam(required = false) String checkInStatus,
                         @Parameter(description = "Permitted event day filter") @RequestParam(required = false) UUID eventDayId,
                         @Parameter(description = "From sequence number") @RequestParam(required = false) Long fromSequence,
@@ -161,7 +161,7 @@ public class PassController {
         public ResponseEntity<ApiResponse<List<PassExportItemResponse>>> exportPasses(
                         @Parameter(description = "Event UUID") @PathVariable UUID eventId,
                         @Parameter(description = "Pass status filter") @RequestParam(required = false) PassStatus status,
-                        @Parameter(description = "Pass category filter: STUDENT, OTHER") @RequestParam(required = false) PassCategory category,
+                        @Parameter(description = "Pass category filter: STUDENT, OTHER, VIP, etc.") @RequestParam(required = false) String category,
                         @Parameter(description = "Starting sequence number") @RequestParam(required = false) Long fromSequence,
                         @Parameter(description = "Ending sequence number") @RequestParam(required = false) Long toSequence,
                         @Parameter(description = "Event day filter") @RequestParam(required = false) UUID dayId) {
