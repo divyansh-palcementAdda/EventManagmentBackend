@@ -216,7 +216,7 @@ public class PassGenerationService {
     @PreAuthorize("hasAuthority('PASS_VIEW')")
     @Transactional(readOnly = true)
     public Page<PassResponse> listPassesByEvent(UUID eventId, Pageable pageable) {
-        return searchPassesByEvent(eventId, null, null, null, null, null, null, null, pageable);
+        return searchPassesByEvent(eventId, null, null, (String) null, null, null, null, null, pageable);
     }
 
     @PreAuthorize("hasAuthority('PASS_VIEW')")
@@ -230,7 +230,7 @@ public class PassGenerationService {
             Long fromSequence,
             Long toSequence,
             Pageable pageable) {
-        return searchPassesByEvent(eventId, search, status, null, checkInStatus, eventDayId, fromSequence, toSequence, pageable);
+        return searchPassesByEvent(eventId, search, status, (String) null, checkInStatus, eventDayId, fromSequence, toSequence, pageable);
     }
 
     @PreAuthorize("hasAuthority('PASS_VIEW')")
