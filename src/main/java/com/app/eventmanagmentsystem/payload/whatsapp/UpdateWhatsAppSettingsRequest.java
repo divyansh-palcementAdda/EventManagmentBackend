@@ -1,5 +1,6 @@
 package com.app.eventmanagmentsystem.payload.whatsapp;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -31,8 +32,10 @@ public class UpdateWhatsAppSettingsRequest {
     private String passActivationTemplateLanguage;
 
     @NotBlank(message = "Event reminder template name is required")
+    @JsonAlias({"reminderTemplateName", "eventReminderTemplateName"})
     private String eventReminderTemplateName;
 
+    @JsonAlias({"reminderTemplateLanguage", "eventReminderTemplateLanguage"})
     private String eventReminderTemplateLanguage;
 
     @Min(value = 1, message = "Lead hours must be at least 1")
