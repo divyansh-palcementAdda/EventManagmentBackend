@@ -340,4 +340,31 @@ class PassServiceTest {
         assertThat(attendeeRepository.existsByEventAndEmail(testEvent.getId(), "sam@multiverse.test")).isTrue();
         assertThat(attendeeRepository.existsByEventAndEmail(savedEvent2.getId(), "sam@multiverse.test")).isTrue();
     }
+
+    @Test
+    @WithMockUser(authorities = {"PASS_GENERATE", "PASS_VIEW"})
+    @DisplayName("Event passes API: paginated search returns flat DTOs without nested entity leaks")
+    void searchPassesByEventWithPaginationAndFilters() {
+        GeneratePassRequest genReq = new GeneratePassRequest();
+        genReq.setEventId(testEvent.getId());
+        genReq.setBatchSize(15);
+        passGenerationService.generatePasses(genReq);
+
+        org.springframework.data.domain.Pageable pageable =
+                org.springframework.data.domain.PageRequest.of(0, 10, org.springframework.data.domain.Sort.by("sequenceNumber").ascending());
+
+        org.springframework.data.domain.Page<PassResponse> page =
+                passGenerationService.searchPassesByEvent(testEvent.getId(), null, PassStatus.NOT_ACTIVATED, "STUDENT", "ALL", null, null, null, pageable);
+
+        assertThat(page.getTotalElements()).isEqualTo(15);
+        assertThat(page.getContent()).hasSize(10);
+        assertThat(page.getTotalPages()).isEqualTo(2);
+
+        // Verify flat DTO characteristics (no raw token, correct eventCode and category)
+        PassResponse first = page.getContent().get(0);
+        assertThat(first.getRawToken()).isNull(); // Never exposed on search/list
+        assertThat(first.getEventCode()).isEqualTo("TS26");
+        assertThat(first.getEventId()).isEqualTo(testEvent.getId());
+        assertThat(first.getStatus()).isEqualTo(PassStatus.NOT_ACTIVATED);
+    }
 }

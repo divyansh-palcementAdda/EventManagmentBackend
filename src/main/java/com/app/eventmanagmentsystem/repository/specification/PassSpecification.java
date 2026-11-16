@@ -42,6 +42,14 @@ public class PassSpecification {
         return (Root<EventPass> root, CriteriaQuery<?> query, CriteriaBuilder cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
+            // Eagerly fetch to avoid N+1 queries when selecting data (skip on count query for pagination)
+            if (query.getResultType() != Long.class && query.getResultType() != long.class) {
+                root.fetch("event", JoinType.LEFT);
+                root.fetch("passCategory", JoinType.LEFT);
+                root.fetch("eventCategory", JoinType.LEFT);
+                root.fetch("attendee", JoinType.LEFT);
+            }
+
             // 1. Mandatory Event ID
             predicates.add(cb.equal(root.get("event").get("id"), eventId));
 

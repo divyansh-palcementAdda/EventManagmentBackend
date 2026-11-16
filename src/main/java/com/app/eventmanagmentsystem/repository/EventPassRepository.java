@@ -39,6 +39,12 @@ public interface EventPassRepository extends JpaRepository<EventPass, UUID>, Jpa
     @Query("SELECT p FROM EventPass p WHERE p.id = :id")
     Optional<EventPass> findByIdForUpdate(@Param("id") UUID id);
 
+    @Query("SELECT p FROM EventPass p LEFT JOIN FETCH p.event LEFT JOIN FETCH p.validDays WHERE p.id = :id")
+    Optional<EventPass> findByIdWithEventAndDays(@Param("id") UUID id);
+
+    @Query("SELECT p FROM EventPass p LEFT JOIN FETCH p.event LEFT JOIN FETCH p.attendee LEFT JOIN FETCH p.validDays WHERE p.id = :id")
+    Optional<EventPass> findByIdWithEventAndDaysAndAttendee(@Param("id") UUID id);
+
     boolean existsByPassNumber(String passNumber);
 
     boolean existsByTokenHash(String tokenHash);

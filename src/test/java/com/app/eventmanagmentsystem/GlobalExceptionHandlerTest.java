@@ -112,4 +112,49 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().getCorrelationId()).isNotBlank();
         assertThat(response.getBody().getMessage()).contains("Reference correlation ID:");
     }
+
+    @Test
+    @DisplayName("Handle ClientAbortException -> quiet handling without response body")
+    void testHandleClientAbortException() {
+        org.apache.catalina.connector.ClientAbortException ex =
+                new org.apache.catalina.connector.ClientAbortException("Broken pipe");
+
+        exceptionHandler.handleClientAbort(ex, request);
+        // Method completes normally without writing response body or throwing
+    }
+
+    @Test
+    @DisplayName("Handle broken pipe IOException in handleGeneric -> null response (no write to closed socket)")
+    void testHandleBrokenPipeInGeneric() {
+        java.io.IOException brokenPipe = new java.io.IOException("java.io.IOException: Broken pipe");
+        RuntimeException wrapped = new RuntimeException("ServletOutputStream failed to flush", brokenPipe);
+
+        var response = exceptionHandler.handleGeneric(wrapped, request);
+
+        assertThat(response).isNull();
+    }
+
+    @Test
+    @DisplayName("Handle broken pipe in handleIOException -> null response")
+    void testHandleBrokenPipeInIOException() {
+        java.io.IOException brokenPipe = new java.io.IOException("Connection reset by peer");
+
+        var response = exceptionHandler.handleIOException(brokenPipe, request);
+
+        assertThat(response).isNull();
+    }
+
+    @Test
+    @DisplayName("Handle genuine IOException -> 500 IO_ERROR with correlationId")
+    void testHandleGenuineIOException() {
+        java.io.IOException diskError = new java.io.IOException("Disk read error: sector corrupted");
+
+        var response = exceptionHandler.handleIOException(diskError, request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getError()).isEqualTo("IO_ERROR");
+        assertThat(response.getBody().getCorrelationId()).isNotBlank();
+    }
 }

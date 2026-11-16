@@ -121,7 +121,21 @@ public class BotsenseMessageRequest {
     public static class Parameter {
         private String type; // "text", "image", "document"
         private String text;
+        private MediaContent image;
         private DocumentContent document;
+    }
+
+    @Getter
+    @Setter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class MediaContent {
+        private Long id;
+        private String link;
+        private String caption;
+        private String filename;
     }
 
     @Getter

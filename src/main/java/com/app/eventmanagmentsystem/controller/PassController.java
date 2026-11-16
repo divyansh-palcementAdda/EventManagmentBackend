@@ -43,6 +43,7 @@ public class PassController {
         private final PassActivationService passActivationService;
         private final BulkPassService bulkPassService;
         private final PassValidityService passValidityService;
+        private final com.app.eventmanagmentsystem.service.impl.PassImageService passImageService;
 
         private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
                         "sequenceNumber", "passNumber", "status", "generatedAt", "activatedAt");
@@ -103,6 +104,32 @@ public class PassController {
                         @Valid @RequestBody AutoActivatePassRequest request) {
                 PassResponse response = passActivationService.autoActivatePass(request);
                 return ResponseEntity.ok(ApiResponse.success("Pass auto-activated successfully", response));
+        }
+
+        @Operation(summary = "Upload generated pass image", description = "Uploads client-rendered pass image (PNG/JPEG) for digital delivery.")
+        @SecurityRequirements
+        @PostMapping(value = "/{passId}/pass-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+        public ResponseEntity<ApiResponse<String>> uploadPassImage(
+                        @Parameter(description = "Pass UUID") @PathVariable UUID passId,
+                        @RequestParam("file") MultipartFile file) {
+                String savedPath = passImageService.savePassImage(passId, file);
+                return ResponseEntity.ok(ApiResponse.success("Pass image uploaded successfully", savedPath));
+        }
+
+        @Operation(summary = "Get pass image", description = "Retrieves the pass composite image.")
+        @SecurityRequirements
+        @GetMapping(value = "/{passId}/pass-image", produces = MediaType.IMAGE_PNG_VALUE)
+        public ResponseEntity<byte[]> getPassImage(
+                        @Parameter(description = "Pass UUID") @PathVariable UUID passId) {
+                byte[] imageBytes = passImageService.getOrGeneratePassImage(passId);
+                if (imageBytes == null || imageBytes.length == 0) {
+                        return ResponseEntity.notFound().build();
+                }
+                return ResponseEntity.ok()
+                                .contentType(MediaType.IMAGE_PNG)
+                                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"pass-" + passId + ".png\"")
+                                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                                .body(imageBytes);
         }
 
         @Operation(summary = "List and search passes by event", description = "Retrieves paginated passes for an event with server-side search, filtering, and sorting. Requires PASS_VIEW permission.")

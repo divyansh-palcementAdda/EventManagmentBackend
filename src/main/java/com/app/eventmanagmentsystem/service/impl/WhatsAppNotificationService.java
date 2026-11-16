@@ -45,6 +45,16 @@ public class WhatsAppNotificationService {
             return;
         }
 
+        // Atomic deduplication: Check if an outbox record already exists for this pass
+        boolean alreadyQueued = outboxRepository.existsByReferenceIdAndNotificationType(
+                pass.getId().toString(),
+                WhatsAppNotificationType.PASS_ACTIVATION
+        );
+        if (alreadyQueued) {
+            log.info("Pass activation WhatsApp notification already queued/sent for pass {} — skipping duplicate", pass.getId());
+            return;
+        }
+
         try {
             Map<String, Object> payloadMap = new HashMap<>();
             payloadMap.put("passId", pass.getId().toString());
@@ -67,8 +77,12 @@ public class WhatsAppNotificationService {
                     .maxAttempts(5)
                     .build();
 
-            outboxRepository.save(outbox);
-            log.info("Enqueued pass activation WhatsApp message for pass {} to {}", pass.getPassNumber(), mobile);
+            try {
+                outboxRepository.save(outbox);
+                log.info("Enqueued pass activation WhatsApp message for pass {} to {}", pass.getPassNumber(), mobile);
+            } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                log.info("Concurrent activation enqueue detected for pass {} — benign duplicate ignored", pass.getId());
+            }
         } catch (Exception e) {
             log.error("Failed to enqueue pass activation WhatsApp notification for pass {}: {}", pass.getId(), e.getMessage());
         }

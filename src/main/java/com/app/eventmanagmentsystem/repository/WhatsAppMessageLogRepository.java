@@ -23,4 +23,6 @@ public interface WhatsAppMessageLogRepository extends JpaRepository<WhatsAppMess
             String status);
 
     boolean existsByPassIdAndStatus(UUID passId, String status);
+
+    java.util.Optional<WhatsAppMessageLog> findByProviderMessageId(String providerMessageId);
 }

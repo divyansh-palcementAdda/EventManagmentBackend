@@ -98,6 +98,7 @@ public class EventPass extends BaseEntity {
      * Permitted event days for which this pass is valid.
      * If empty, the pass is valid for all days of the event.
      */
+    @org.hibernate.annotations.BatchSize(size = 100)
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "pass_valid_days",

@@ -4,6 +4,11 @@ public enum WhatsAppOutboxStatus {
     PENDING,
     PROCESSING,
     SENT,
+    DELIVERED,
+    RETRY_WAIT,
+    UNKNOWN,
     FAILED,
-    SUPPRESSED
+    FAILED_PERMANENTLY,
+    SUPPRESSED,
+    MANUAL_REVIEW
 }

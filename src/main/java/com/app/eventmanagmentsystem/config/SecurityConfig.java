@@ -3,6 +3,7 @@ package com.app.eventmanagmentsystem.config;
 import com.app.eventmanagmentsystem.security.AppUserDetailsService;
 import com.app.eventmanagmentsystem.security.jwt.JwtAuthenticationFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -84,9 +85,11 @@ public class SecurityConfig {
                 .authenticationEntryPoint(authenticationEntryPoint())
                 .accessDeniedHandler(accessDeniedHandler()))
             .authorizeHttpRequests(auth -> auth
+                .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD).permitAll()
                 // Public endpoints
                 .requestMatchers(
                     "/",
+                    "/error",
                     "/api/v1",
                     "/api/v1/health",
                     "/api/v1/auth/**",
@@ -96,7 +99,9 @@ public class SecurityConfig {
                     "/api/v1/passes/auto-activate/**",
                     "/api/v1/passes/validate",
                     "/api/v1/passes/validate/**",
+                    "/api/v1/passes/*/pass-image",
                     "/api/v1/whatsapp/otp/**",
+                    "/api/v1/whatsapp/webhook/**",
                     "/actuator/health",
                     "/v3/api-docs/**",
                     "/swagger-ui/**",

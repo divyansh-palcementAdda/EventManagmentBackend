@@ -92,6 +92,120 @@ public class BotsenseSerializationTest {
     }
 
     @Test
+    @DisplayName("Verify rcf_activation_pass serialization: IMAGE header parameter present, ZERO body parameters (preventing Meta 132000)")
+    void testRcfActivationPassSerializationWithImageHeaderAndNoBodyParams() throws Exception {
+        BotsenseMessageRequest.Component header = BotsenseMessageRequest.Component.builder()
+                .type("header")
+                .parameters(List.of(
+                        BotsenseMessageRequest.Parameter.builder()
+                                .type("image")
+                                .image(BotsenseMessageRequest.MediaContent.builder()
+                                        .id(987654321L)
+                                        .build())
+                                .build()
+                ))
+                .build();
+
+        BotsenseMessageRequest request = BotsenseMessageRequest.builder()
+                .to("+919039035431")
+                .fromNumberId("f401f874-6837-4091-b6a9-76d5c8031b21")
+                .type("template")
+                .template(BotsenseMessageRequest.TemplateContent.builder()
+                        .name("rcf_activation_pass")
+                        .language("en")
+                        .components(List.of(header))
+                        .build())
+                .build();
+
+        ObjectMapper mapper = botsenseApiClient.getObjectMapper();
+        String json = mapper.writeValueAsString(request);
+
+        JsonNode root = mapper.readTree(json);
+        JsonNode templateNode = root.get("template");
+        assertThat(templateNode).isNotNull();
+        assertThat(templateNode.get("name").asText()).isEqualTo("rcf_activation_pass");
+        assertThat(templateNode.get("language").asText()).isEqualTo("en");
+
+        JsonNode componentsNode = templateNode.get("components");
+        assertThat(componentsNode).isNotNull();
+        assertThat(componentsNode.isArray()).isTrue();
+        assertThat(componentsNode.size()).isEqualTo(1);
+
+        JsonNode headerNode = componentsNode.get(0);
+        assertThat(headerNode.get("type").asText()).isEqualTo("header");
+
+        JsonNode headerParams = headerNode.get("parameters");
+        assertThat(headerParams).isNotNull();
+        assertThat(headerParams.size()).isEqualTo(1);
+        assertThat(headerParams.get(0).get("type").asText()).isEqualTo("image");
+        assertThat(headerParams.get(0).get("image").get("id").asLong()).isEqualTo(987654321L);
+        assertThat(headerParams.get(0).get("image").get("id").isNumber()).isTrue();
+        assertThat(headerParams.get(0).get("image").get("id").isTextual()).isFalse();
+
+        // CRITICAL: Ensure NO body components or body parameters exist
+        for (JsonNode comp : componentsNode) {
+            assertThat(comp.get("type").asText()).isNotEqualTo("body");
+            assertThat(comp.get("type").asText()).isNotEqualTo("button");
+        }
+    }
+
+    @Test
+    @DisplayName("Verify rcf_activation_pass serialization with public HTTPS link: IMAGE header parameter present, ZERO body parameters")
+    void testRcfActivationPassSerializationWithPublicLinkImageHeader() throws Exception {
+        BotsenseMessageRequest.Component header = BotsenseMessageRequest.Component.builder()
+                .type("header")
+                .parameters(List.of(
+                        BotsenseMessageRequest.Parameter.builder()
+                                .type("image")
+                                .image(BotsenseMessageRequest.MediaContent.builder()
+                                        .link("https://cdn.eventpass.io/passes/pass_12345.png")
+                                        .build())
+                                .build()
+                ))
+                .build();
+
+        BotsenseMessageRequest request = BotsenseMessageRequest.builder()
+                .to("+919039035431")
+                .fromNumberId("f401f874-6837-4091-b6a9-76d5c8031b21")
+                .type("template")
+                .template(BotsenseMessageRequest.TemplateContent.builder()
+                        .name("rcf_activation_pass")
+                        .language("en")
+                        .components(List.of(header))
+                        .build())
+                .build();
+
+        ObjectMapper mapper = botsenseApiClient.getObjectMapper();
+        String json = mapper.writeValueAsString(request);
+
+        JsonNode root = mapper.readTree(json);
+        JsonNode templateNode = root.get("template");
+        assertThat(templateNode).isNotNull();
+        assertThat(templateNode.get("name").asText()).isEqualTo("rcf_activation_pass");
+        assertThat(templateNode.get("language").asText()).isEqualTo("en");
+
+        JsonNode componentsNode = templateNode.get("components");
+        assertThat(componentsNode).isNotNull();
+        assertThat(componentsNode.size()).isEqualTo(1);
+
+        JsonNode headerNode = componentsNode.get(0);
+        assertThat(headerNode.get("type").asText()).isEqualTo("header");
+
+        JsonNode headerParams = headerNode.get("parameters");
+        assertThat(headerParams).isNotNull();
+        assertThat(headerParams.size()).isEqualTo(1);
+        assertThat(headerParams.get(0).get("type").asText()).isEqualTo("image");
+        assertThat(headerParams.get(0).get("image").get("link").asText()).isEqualTo("https://cdn.eventpass.io/passes/pass_12345.png");
+        assertThat(headerParams.get(0).get("image").has("id")).isFalse();
+
+        // Ensure NO body or button components exist
+        for (JsonNode comp : componentsNode) {
+            assertThat(comp.get("type").asText()).isNotEqualTo("body");
+            assertThat(comp.get("type").asText()).isNotEqualTo("button");
+        }
+    }
+
+    @Test
     @DisplayName("Verify Botsense 400 error deserialization handles string error code without exception")
     void testBotsenseErrorDeserialization() throws Exception {
         String errorJson = "{\n" +

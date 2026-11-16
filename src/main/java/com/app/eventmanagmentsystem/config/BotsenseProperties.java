@@ -47,4 +47,10 @@ public class BotsenseProperties {
      * Read timeout in milliseconds
      */
     private int readTimeoutMs = 15000;
+
+    /**
+     * Public base URL for media assets accessible by Botsense / WhatsApp
+     * Default: https://event.areyoureporting.com
+     */
+    private String mediaPublicBaseUrl = "https://event.areyoureporting.com";
 }

@@ -30,8 +30,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
+import org.springframework.test.annotation.DirtiesContext;
+
 @SpringBootTest
 @ActiveProfiles("test")
+@DirtiesContext
 public class WhatsAppIntegrationTest {
 
     @Autowired
@@ -85,6 +88,7 @@ public class WhatsAppIntegrationTest {
 
         // Default mock for BotsenseApiClient
         when(botsenseApiClient.isConfigured()).thenReturn(true);
+        when(botsenseApiClient.uploadMedia(any(), anyString(), anyString())).thenReturn("mock.media.id.789");
         when(botsenseApiClient.sendOtpTemplate(anyString(), anyString(), anyString(), anyString()))
                 .thenReturn(BotsenseMessageResponse.builder()
                         .messages(List.of(new BotsenseMessageResponse.MessageRef("wamid.mock.otp.123", "sent", "sent")))
@@ -193,9 +197,62 @@ public class WhatsAppIntegrationTest {
 
         // Process outbox
         outboxProcessor.processOutbox();
-        verify(botsenseApiClient, times(1)).sendTemplateMessage(anyString(), anyString(), anyString(), any());
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<List<BotsenseMessageRequest.Component>> captor =
+                org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(botsenseApiClient, times(1)).sendTemplateMessage(anyString(), anyString(), anyString(), captor.capture());
+
+        List<BotsenseMessageRequest.Component> sentComponents = captor.getValue();
+        assertThat(sentComponents).isNotNull();
+        assertThat(sentComponents).hasSize(1);
+        assertThat(sentComponents.get(0).getType()).isEqualTo("header");
+        assertThat(sentComponents.get(0).getParameters().get(0).getType()).isEqualTo("image");
+        assertThat(sentComponents.get(0).getParameters().get(0).getImage().getLink())
+                .isEqualTo("https://event.areyoureporting.com/api/v1/passes/" + testPass.getId() + "/pass-image");
+        assertThat(sentComponents.get(0).getParameters().get(0).getImage().getId()).isNull();
+
+        // Verify NO body components exist
+        assertThat(sentComponents.stream().noneMatch(c -> "body".equalsIgnoreCase(c.getType()))).isTrue();
+
         WhatsAppOutbox processed = outboxRepository.findById(item.getId()).orElseThrow();
         assertThat(processed.getStatus()).isEqualTo(WhatsAppOutboxStatus.SENT);
+    }
+
+    @Test
+    @DisplayName("Pass Activation with Public HTTPS Link: uses link in header IMAGE param with 0 body params")
+    void testPassActivationWithPublicLinkImage() {
+        configureToggles(true, false, true, false);
+
+        // Enqueue with public image link in payload
+        WhatsAppOutbox item = WhatsAppOutbox.builder()
+                .recipientMobile("+919876543210")
+                .recipientName("Link Attendee")
+                .notificationType(WhatsAppNotificationType.PASS_ACTIVATION)
+                .referenceId(testPass.getId().toString())
+                .templateName("rcf_activation_pass")
+                .payload("{\"passNumber\":\"" + testPass.getPassNumber() + "\",\"imageLink\":\"https://cdn.eventpass.io/passes/test.png\"}")
+                .status(WhatsAppOutboxStatus.PENDING)
+                .build();
+        outboxRepository.save(item);
+
+        outboxProcessor.processOutbox();
+
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<List<BotsenseMessageRequest.Component>> captor =
+                org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(botsenseApiClient, atLeastOnce()).sendTemplateMessage(anyString(), anyString(), anyString(), captor.capture());
+
+        List<BotsenseMessageRequest.Component> sentComponents = captor.getValue();
+        assertThat(sentComponents).isNotNull();
+        assertThat(sentComponents).hasSize(1);
+        assertThat(sentComponents.get(0).getType()).isEqualTo("header");
+        assertThat(sentComponents.get(0).getParameters().get(0).getType()).isEqualTo("image");
+        assertThat(sentComponents.get(0).getParameters().get(0).getImage().getLink()).isEqualTo("https://cdn.eventpass.io/passes/test.png");
+        assertThat(sentComponents.get(0).getParameters().get(0).getImage().getId()).isNull();
+
+        // 0 body components
+        assertThat(sentComponents.stream().noneMatch(c -> "body".equalsIgnoreCase(c.getType()))).isTrue();
     }
 
     @Test

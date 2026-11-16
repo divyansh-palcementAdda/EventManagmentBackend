@@ -311,6 +311,10 @@ public class BotsenseApiClient {
         HttpEntity<BotsenseMessageRequest> entity = new HttpEntity<>(request, headers);
 
         try {
+            if (log.isInfoEnabled()) {
+                String payloadJson = objectMapper.writeValueAsString(request);
+                log.info("Botsense outbound [{}] request to {}: {}", request.getType(), maskPhone(request.getTo()), payloadJson);
+            }
             ResponseEntity<BotsenseMessageResponse> response = getRestTemplate().exchange(
                     url,
                     HttpMethod.POST,
@@ -321,7 +325,8 @@ public class BotsenseApiClient {
         } catch (HttpStatusCodeException e) {
             int statusCode = e.getStatusCode().value();
             String responseBody = e.getResponseBodyAsString();
-            log.error("Botsense message send HTTP error [{}] to {}: {}", statusCode, request.getTo(), responseBody);
+            log.error("Botsense message send HTTP error [{}] to {}: responseBody={}",
+                    statusCode, maskPhone(request.getTo()), responseBody);
 
             BotsenseMessageResponse errorResponse = null;
             if (responseBody != null && !responseBody.isBlank()) {
@@ -349,17 +354,105 @@ public class BotsenseApiClient {
                     ))
                     .build();
         } catch (ResourceAccessException e) {
-            log.error("Botsense connection/timeout error to {}: {}", request.getTo(), e.getMessage());
-            return BotsenseMessageResponse.builder()
-                    .object("error")
-                    .error(new BotsenseMessageResponse.ErrorDetails(e.getMessage(), "TIMEOUT_ERROR", 504, "NETWORK_TIMEOUT"))
-                    .build();
+            Throwable cause = e.getCause();
+            boolean isReadTimeout = false;
+
+            if (cause instanceof java.net.SocketTimeoutException) {
+                String causeMsg = cause.getMessage() != null ? cause.getMessage().toLowerCase() : "";
+                if (causeMsg.contains("read timed out") || causeMsg.contains("read timeout")) {
+                    isReadTimeout = true;
+                }
+            }
+            if (!isReadTimeout && e.getMessage() != null) {
+                String topMsg = e.getMessage().toLowerCase();
+                if (topMsg.contains("read timed out") || topMsg.contains("read timeout")) {
+                    isReadTimeout = true;
+                }
+            }
+
+            if (isReadTimeout) {
+                log.error("Botsense Read timed out waiting for response from {}: {}", maskPhone(request.getTo()), e.getMessage());
+                return BotsenseMessageResponse.builder()
+                        .object("error")
+                        .error(new BotsenseMessageResponse.ErrorDetails(
+                                "Read timed out waiting for Botsense response",
+                                "READ_TIMEOUT",
+                                504,
+                                "READ_TIMEOUT"
+                        ))
+                        .build();
+            } else {
+                log.error("Botsense connection failure before transmission to {}: {}", maskPhone(request.getTo()), e.getMessage());
+                return BotsenseMessageResponse.builder()
+                        .object("error")
+                        .error(new BotsenseMessageResponse.ErrorDetails(
+                                "Connection failure before transmission: " + e.getMessage(),
+                                "CONNECT_FAILURE",
+                                503,
+                                "CONNECT_FAILURE"
+                        ))
+                        .build();
+            }
         } catch (Exception e) {
             log.error("Botsense message send error to {}: {}", request.getTo(), e.getMessage());
             return BotsenseMessageResponse.builder()
                     .object("error")
                     .error(new BotsenseMessageResponse.ErrorDetails(e.getMessage(), "UNEXPECTED_ERROR", 500, "INTERNAL_ERROR"))
                     .build();
+        }
+    }
+
+    /**
+     * GET /v1/messages/{messageId}
+     * Checks status of an individual WhatsApp message if provider supports it.
+     */
+    public Optional<Map<String, Object>> checkMessageStatus(String providerMessageId) {
+        if (!isConfigured() || providerMessageId == null || providerMessageId.isBlank()) {
+            return Optional.empty();
+        }
+
+        String url = properties.getBaseUrl() + "/messages/" + providerMessageId;
+        HttpHeaders headers = createHeaders();
+        HttpEntity<?> entity = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    new ParameterizedTypeReference<>() {}
+            );
+            return Optional.ofNullable(response.getBody());
+        } catch (Exception e) {
+            log.debug("Botsense checkMessageStatus error for {}: {}", providerMessageId, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * GET /v1/messages?to={recipientMobile}
+     * Queries recent outgoing messages for recipient if provider supports it.
+     */
+    public Optional<Map<String, Object>> checkMessageByRecipient(String recipientMobile) {
+        if (!isConfigured() || recipientMobile == null || recipientMobile.isBlank()) {
+            return Optional.empty();
+        }
+
+        String url = properties.getBaseUrl() + "/messages?to=" + formatPhoneNumber(recipientMobile);
+        HttpHeaders headers = createHeaders();
+        HttpEntity<?> entity = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    new ParameterizedTypeReference<>() {}
+            );
+            return Optional.ofNullable(response.getBody());
+        } catch (Exception e) {
+            log.debug("Botsense checkMessageByRecipient error for {}: {}", maskPhone(recipientMobile), e.getMessage());
+            return Optional.empty();
         }
     }
 
@@ -374,5 +467,10 @@ public class BotsenseApiClient {
             return "+" + digits;
         }
         return digits;
+    }
+
+    public static String maskPhone(String phone) {
+        if (phone == null || phone.length() < 6) return "****";
+        return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 3);
     }
 }

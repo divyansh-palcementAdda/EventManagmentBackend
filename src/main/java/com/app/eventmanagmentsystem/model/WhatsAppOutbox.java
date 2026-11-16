@@ -12,7 +12,9 @@ import java.util.UUID;
 @Entity
 @Table(name = "whatsapp_outbox", indexes = {
         @Index(name = "idx_wo_status_retry", columnList = "status, next_retry_at"),
-        @Index(name = "idx_wo_reference", columnList = "reference_id, notification_type")
+        @Index(name = "idx_wo_status_lease", columnList = "status, processing_lease_until"),
+        @Index(name = "idx_wo_reference", columnList = "reference_id, notification_type"),
+        @Index(name = "idx_wo_provider_msg", columnList = "provider_message_id")
 })
 @Getter
 @Setter
@@ -53,7 +55,7 @@ public class WhatsAppOutbox {
     private String payload;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 20)
+    @Column(name = "status", nullable = false, length = 30)
     @Builder.Default
     private WhatsAppOutboxStatus status = WhatsAppOutboxStatus.PENDING;
 
@@ -68,8 +70,33 @@ public class WhatsAppOutbox {
     @Column(name = "last_error", columnDefinition = "TEXT")
     private String lastError;
 
+    @Column(name = "last_error_category", length = 50)
+    private String lastErrorCategory;
+
     @Column(name = "next_retry_at")
     private Instant nextRetryAt;
+
+    @Column(name = "provider_message_id", length = 100)
+    private String providerMessageId;
+
+    @Column(name = "last_dispatch_at")
+    private Instant lastDispatchAt;
+
+    @Column(name = "unknown_outcome_at")
+    private Instant unknownOutcomeAt;
+
+    @Column(name = "processing_lease_until")
+    private Instant processingLeaseUntil;
+
+    @Column(name = "reconciliation_status", length = 50)
+    private String reconciliationStatus;
+
+    @Column(name = "reconciliation_attempts", nullable = false)
+    @Builder.Default
+    private int reconciliationAttempts = 0;
+
+    @Column(name = "correlation_id", length = 64)
+    private String correlationId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default

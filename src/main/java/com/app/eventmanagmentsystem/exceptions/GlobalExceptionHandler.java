@@ -295,11 +295,42 @@ public class GlobalExceptionHandler {
                 return ResponseEntity.badRequest().body(error);
         }
 
-        // ===== 8. Fallback Unhandled Exception =====
+        // ===== 8. Client Disconnect / Broken Pipe Handling =====
 
-    @ExceptionHandler(Exception.class)
+        @ExceptionHandler({
+                org.apache.catalina.connector.ClientAbortException.class,
+                org.springframework.web.context.request.async.AsyncRequestNotUsableException.class
+        })
+        public void handleClientAbort(Exception ex, HttpServletRequest request) {
+                logClientAbort(ex, request);
+        }
 
+        @ExceptionHandler(java.io.IOException.class)
+        public ResponseEntity<ErrorResponse> handleIOException(java.io.IOException ex, HttpServletRequest request) {
+                if (isClientAbortException(ex)) {
+                        logClientAbort(ex, request);
+                        return null;
+                }
+                String correlationId = UUID.randomUUID().toString();
+                log.error("Unhandled I/O exception [correlationId={}, path={}]: {}",
+                                correlationId, request.getRequestURI(), ex.getMessage(), ex);
+                ErrorResponse error = new ErrorResponse(
+                                "IO_ERROR",
+                                "An I/O error occurred while processing the request. Reference correlation ID: " + correlationId,
+                                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                                request.getRequestURI(),
+                                correlationId);
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+
+        // ===== 9. Fallback Unhandled Exception =====
+
+        @ExceptionHandler(Exception.class)
         public ResponseEntity<ErrorResponse> handleGeneric(Exception ex, HttpServletRequest request) {
+                if (isClientAbortException(ex)) {
+                        logClientAbort(ex, request);
+                        return null;
+                }
                 String correlationId = UUID.randomUUID().toString();
                 log.error("Unhandled internal server error [correlationId={}, path={}]: {}",
                                 correlationId, request.getRequestURI(), ex.getMessage(), ex);
@@ -310,5 +341,42 @@ public class GlobalExceptionHandler {
                                 request.getRequestURI(),
                                 correlationId);
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+        }
+
+        public static boolean isClientAbortException(Throwable ex) {
+                Throwable current = ex;
+                while (current != null) {
+                        String className = current.getClass().getName();
+                        if (className.contains("ClientAbortException")
+                                        || className.contains("AsyncRequestNotUsableException")) {
+                                return true;
+                        }
+                        if (current instanceof java.io.IOException) {
+                                String msg = current.getMessage();
+                                if (msg != null) {
+                                        String lower = msg.toLowerCase();
+                                        if (lower.contains("broken pipe")
+                                                        || lower.contains("connection reset by peer")
+                                                        || lower.contains("connection was reset")
+                                                        || lower.contains("an established connection was aborted")
+                                                        || lower.contains("connection was closed by the remote host")
+                                                        || lower.contains("connection reset")) {
+                                                return true;
+                                        }
+                                }
+                        }
+                        current = current.getCause();
+                }
+                return false;
+        }
+
+        private void logClientAbort(Throwable ex, HttpServletRequest request) {
+                String uri = request != null ? request.getRequestURI() : "unknown";
+                String rootMsg = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
+                if (log.isDebugEnabled()) {
+                        log.debug("Client aborted connection on path {}: {}", uri, rootMsg, ex);
+                } else {
+                        log.info("Client aborted connection on path {}: {}", uri, rootMsg);
+                }
         }
 }
