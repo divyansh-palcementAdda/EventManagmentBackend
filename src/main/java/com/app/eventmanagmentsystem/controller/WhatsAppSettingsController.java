@@ -24,6 +24,7 @@ import java.util.List;
 public class WhatsAppSettingsController {
 
     private final WhatsAppSettingsService settingsService;
+    private final com.app.eventmanagmentsystem.service.impl.WhatsAppOutboxProcessor outboxProcessor;
 
     @Operation(summary = "Get WhatsApp integration settings", description = "Retrieves master and independent feature toggles (OTP, Pass Activation, Reminders) and template mappings.")
     @GetMapping("/settings")
@@ -55,5 +56,14 @@ public class WhatsAppSettingsController {
     @PreAuthorize("hasAuthority('WHATSAPP_TEMPLATE_VIEW')")
     public ResponseEntity<ApiResponse<List<BotsenseTemplateItem>>> listTemplates() {
         return ResponseEntity.ok(ApiResponse.success(settingsService.getAvailableTemplates()));
+    }
+
+    @Operation(summary = "Retry failed WhatsApp outbox messages", description = "Safely re-queues failed messages for redelivery after template payload correction, with deduplication checks.")
+    @PostMapping("/outbox/retry-failed")
+    @PreAuthorize("hasAuthority('WHATSAPP_CONFIG_MANAGE')")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> retryFailedMessages() {
+        int count = outboxProcessor.retryFailedMessages();
+        return ResponseEntity.ok(ApiResponse.success("Re-queued " + count + " failed message(s) for delivery",
+                java.util.Map.of("requeuedCount", count)));
     }
 }

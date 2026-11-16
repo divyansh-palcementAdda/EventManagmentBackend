@@ -46,8 +46,43 @@ public class BotsenseMessageRequest {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class TemplateContent {
         private String name;
-        private Language language;
+        private String language;
         private List<Component> components;
+
+        public void setLanguage(String language) {
+            this.language = language;
+        }
+
+        public void setLanguage(Language lang) {
+            this.language = lang != null ? lang.getCode() : null;
+        }
+
+        @com.fasterxml.jackson.annotation.JsonSetter("language")
+        public void setLanguageFromJson(com.fasterxml.jackson.databind.JsonNode node) {
+            if (node == null || node.isNull()) {
+                this.language = null;
+            } else if (node.isTextual()) {
+                this.language = node.asText();
+            } else if (node.has("code")) {
+                this.language = node.get("code").asText();
+            } else {
+                this.language = node.asText();
+            }
+        }
+
+        public static class TemplateContentBuilder {
+            private String language;
+
+            public TemplateContentBuilder language(String language) {
+                this.language = language;
+                return this;
+            }
+
+            public TemplateContentBuilder language(Language lang) {
+                this.language = lang != null ? lang.getCode() : null;
+                return this;
+            }
+        }
     }
 
     @Getter

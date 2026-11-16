@@ -55,6 +55,9 @@ public interface EventPassRepository extends JpaRepository<EventPass, UUID>, Jpa
     @Query("SELECT COUNT(p) FROM EventPass p WHERE p.event.id = :eventId AND p.status = :status")
     long countByEventIdAndStatus(@Param("eventId") UUID eventId, @Param("status") PassStatus status);
 
+    @Query("SELECT p.category, p.status, COUNT(p) FROM EventPass p WHERE p.event.id = :eventId GROUP BY p.category, p.status")
+    List<Object[]> countByEventIdGroupByCategoryAndStatus(@Param("eventId") UUID eventId);
+
     List<EventPass> findByEventIdAndSequenceNumberBetweenOrderBySequenceNumberAsc(UUID eventId, Long fromSeq, Long toSeq);
 
     List<EventPass> findByEventIdOrderBySequenceNumberAsc(UUID eventId);

@@ -16,4 +16,11 @@ public interface WhatsAppMessageLogRepository extends JpaRepository<WhatsAppMess
     Page<WhatsAppMessageLog> findByEventIdOrderByCreatedAtDesc(UUID eventId, Pageable pageable);
 
     Page<WhatsAppMessageLog> findByRecipientMobileContainingOrderByCreatedAtDesc(String recipientMobile, Pageable pageable);
+
+    boolean existsByRecipientMobileAndNotificationTypeAndStatus(
+            String recipientMobile,
+            WhatsAppNotificationType notificationType,
+            String status);
+
+    boolean existsByPassIdAndStatus(UUID passId, String status);
 }

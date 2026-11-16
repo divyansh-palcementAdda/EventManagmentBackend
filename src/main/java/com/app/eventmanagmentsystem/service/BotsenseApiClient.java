@@ -4,7 +4,7 @@ import com.app.eventmanagmentsystem.config.BotsenseProperties;
 import com.app.eventmanagmentsystem.payload.whatsapp.BotsenseMessageRequest;
 import com.app.eventmanagmentsystem.payload.whatsapp.BotsenseMessageResponse;
 import com.app.eventmanagmentsystem.payload.whatsapp.BotsenseTemplateItem;
-import lombok.RequiredArgsConstructor;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.ByteArrayResource;
@@ -13,6 +13,8 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.Duration;
@@ -20,10 +22,24 @@ import java.util.*;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class BotsenseApiClient {
 
     private final BotsenseProperties properties;
+    private final ObjectMapper objectMapper;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public BotsenseApiClient(BotsenseProperties properties, ObjectMapper objectMapper) {
+        this.properties = properties;
+        this.objectMapper = objectMapper != null ? objectMapper : new ObjectMapper();
+    }
+
+    public BotsenseApiClient(BotsenseProperties properties) {
+        this(properties, new ObjectMapper());
+    }
+
+    public ObjectMapper getObjectMapper() {
+        return objectMapper;
+    }
 
     private RestTemplate getRestTemplate() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
@@ -168,7 +184,7 @@ public class BotsenseApiClient {
                 .type("template")
                 .template(BotsenseMessageRequest.TemplateContent.builder()
                         .name(tpl)
-                        .language(BotsenseMessageRequest.Language.builder().code(lang).build())
+                        .language(lang)
                         .components(List.of(bodyComponent, buttonComponent))
                         .build())
                 .build();
@@ -190,7 +206,7 @@ public class BotsenseApiClient {
                 .type("template")
                 .template(BotsenseMessageRequest.TemplateContent.builder()
                         .name(templateName)
-                        .language(BotsenseMessageRequest.Language.builder().code(lang).build())
+                        .language(lang)
                         .components(components)
                         .build())
                 .build();
@@ -302,11 +318,47 @@ public class BotsenseApiClient {
                     BotsenseMessageResponse.class
             );
             return response.getBody();
+        } catch (HttpStatusCodeException e) {
+            int statusCode = e.getStatusCode().value();
+            String responseBody = e.getResponseBodyAsString();
+            log.error("Botsense message send HTTP error [{}] to {}: {}", statusCode, request.getTo(), responseBody);
+
+            BotsenseMessageResponse errorResponse = null;
+            if (responseBody != null && !responseBody.isBlank()) {
+                try {
+                    errorResponse = objectMapper.readValue(responseBody, BotsenseMessageResponse.class);
+                } catch (Exception parseEx) {
+                    log.debug("Could not parse Botsense error response as BotsenseMessageResponse: {}", parseEx.getMessage());
+                }
+            }
+
+            if (errorResponse != null && errorResponse.getError() != null) {
+                errorResponse.getError().setHttpStatus(statusCode);
+                return errorResponse;
+            }
+
+            String errorType = e.getStatusCode().is4xxClientError() ? "CLIENT_ERROR" : "SERVER_ERROR";
+            String code = e.getStatusCode().is4xxClientError() ? "BAD_REQUEST" : "SERVER_ERROR";
+            return BotsenseMessageResponse.builder()
+                    .object("error")
+                    .error(new BotsenseMessageResponse.ErrorDetails(
+                            responseBody != null && !responseBody.isBlank() ? responseBody : e.getMessage(),
+                            errorType,
+                            statusCode,
+                            code
+                    ))
+                    .build();
+        } catch (ResourceAccessException e) {
+            log.error("Botsense connection/timeout error to {}: {}", request.getTo(), e.getMessage());
+            return BotsenseMessageResponse.builder()
+                    .object("error")
+                    .error(new BotsenseMessageResponse.ErrorDetails(e.getMessage(), "TIMEOUT_ERROR", 504, "NETWORK_TIMEOUT"))
+                    .build();
         } catch (Exception e) {
             log.error("Botsense message send error to {}: {}", request.getTo(), e.getMessage());
             return BotsenseMessageResponse.builder()
                     .object("error")
-                    .error(new BotsenseMessageResponse.ErrorDetails(e.getMessage(), "NETWORK_ERROR", 500, null))
+                    .error(new BotsenseMessageResponse.ErrorDetails(e.getMessage(), "UNEXPECTED_ERROR", 500, "INTERNAL_ERROR"))
                     .build();
         }
     }

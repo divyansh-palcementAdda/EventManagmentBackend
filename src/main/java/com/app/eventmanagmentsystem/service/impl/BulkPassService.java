@@ -55,6 +55,33 @@ public class BulkPassService {
         long revoked = passRepository.countByEventIdAndStatus(eventId, PassStatus.REVOKED);
         long checkedIn = checkInRepository.countByEventId(eventId);
 
+        List<Object[]> catGroups = passRepository.countByEventIdGroupByCategoryAndStatus(eventId);
+        Map<String, PassStatsResponse.CategoryStats> categoryStats = new HashMap<>();
+        if (catGroups != null) {
+            for (Object[] row : catGroups) {
+                String cat = row[0] != null ? row[0].toString() : "OTHER";
+                PassStatus st = (PassStatus) row[1];
+                long count = ((Number) row[2]).longValue();
+
+                PassStatsResponse.CategoryStats cs = categoryStats.computeIfAbsent(cat, k ->
+                        PassStatsResponse.CategoryStats.builder()
+                                .total(0)
+                                .available(0)
+                                .activated(0)
+                                .revoked(0)
+                                .build()
+                );
+                cs.setTotal(cs.getTotal() + count);
+                if (st == PassStatus.ACTIVATED) {
+                    cs.setActivated(cs.getActivated() + count);
+                } else if (st == PassStatus.NOT_ACTIVATED) {
+                    cs.setAvailable(cs.getAvailable() + count);
+                } else if (st == PassStatus.REVOKED) {
+                    cs.setRevoked(cs.getRevoked() + count);
+                }
+            }
+        }
+
         return PassStatsResponse.builder()
                 .eventId(event.getId())
                 .eventCode(event.getEventCode())
@@ -64,6 +91,7 @@ public class BulkPassService {
                 .availablePasses(available)
                 .revokedPasses(revoked)
                 .checkedInCount(checkedIn)
+                .categoryStats(categoryStats)
                 .build();
     }
 
@@ -115,9 +143,7 @@ public class BulkPassService {
         // Apply filters if needed
         return passes.stream()
                 .filter(p -> status == null || p.getStatus() == status)
-                .filter(p -> category == null || category.isBlank() || "ALL".equalsIgnoreCase(category)
-                        || category.equalsIgnoreCase(p.getCategory())
-                        || (p.getPassCategory() != null && category.equalsIgnoreCase(p.getPassCategory().getCode())))
+                .filter(p -> matchesCategory(p, category))
                 .filter(p -> dayId == null || p.getValidDays().isEmpty() || p.getValidDays().stream().anyMatch(d -> d.getId().equals(dayId)))
                 .map(p -> toExportItem(p, event))
                 .collect(Collectors.toList());
@@ -139,19 +165,12 @@ public class BulkPassService {
                                 .build())
                         .collect(Collectors.toList());
 
-        String catName = pass.getPassCategory() != null ? pass.getPassCategory().getName() : pass.getCategory();
-        var actMode = pass.getEventCategory() != null ? pass.getEventCategory().getActivationMode() : com.app.eventmanagmentsystem.model.enums.ActivationMode.SELF_SERVICE;
-        boolean qrReq = true;
-        if ("VIP".equalsIgnoreCase(pass.getCategory())
-                || (pass.getPassCategory() != null && "VIP".equalsIgnoreCase(pass.getPassCategory().getCode()))
-                || (pass.getCategory() != null && pass.getCategory().toUpperCase().contains("VIP"))) {
-            qrReq = false;
-        } else if (pass.getEventCategory() != null) {
-            qrReq = pass.getEventCategory().isQrRequired()
-                    && pass.getEventCategory().getActivationMode() != com.app.eventmanagmentsystem.model.enums.ActivationMode.NO_QR_WALK_IN;
-        } else {
-            qrReq = pass.getTokenHash() != null;
-        }
+        String catName = pass.getPassCategory() != null ? pass.getPassCategory().getName() :
+                (pass.getEventCategory() != null && pass.getEventCategory().getCategory() != null ? pass.getEventCategory().getCategory().getName() : pass.getCategory());
+        boolean noQr = isNoQrPass(pass);
+        boolean qrReq = !noQr;
+        var actMode = noQr ? com.app.eventmanagmentsystem.model.enums.ActivationMode.NO_QR_WALK_IN :
+                (pass.getEventCategory() != null ? pass.getEventCategory().getActivationMode() : com.app.eventmanagmentsystem.model.enums.ActivationMode.SELF_SERVICE);
 
         // Standard QR data payload pointing to pass activation / inspection
         String qrData = qrReq ? pass.getPassNumber() : null;
@@ -177,6 +196,54 @@ public class BulkPassService {
                 .attendeeMobileNumber(attendeeMobile)
                 .qrData(qrData)
                 .build();
+    }
+
+    public boolean matchesCategory(EventPass p, String category) {
+        if (category == null || category.isBlank() || "ALL".equalsIgnoreCase(category)) {
+            return true;
+        }
+        if (category.equalsIgnoreCase(p.getCategory())) {
+            return true;
+        }
+        if (p.getPassCategory() != null && (category.equalsIgnoreCase(p.getPassCategory().getCode()) || category.equalsIgnoreCase(p.getPassCategory().getName()))) {
+            return true;
+        }
+        if (p.getEventCategory() != null && p.getEventCategory().getCategory() != null) {
+            if (category.equalsIgnoreCase(p.getEventCategory().getCategory().getCode())
+                    || category.equalsIgnoreCase(p.getEventCategory().getCategory().getName())) {
+                return true;
+            }
+        }
+        if ("VIP".equalsIgnoreCase(category)) {
+            if ((p.getCategory() != null && p.getCategory().toUpperCase().contains("VIP"))
+                    || (p.getPassNumber() != null && p.getPassNumber().toUpperCase().contains("VIP"))
+                    || (p.getEventCategory() != null && p.getEventCategory().getCategory() != null && p.getEventCategory().getCategory().getName() != null && p.getEventCategory().getCategory().getName().toUpperCase().contains("VIP"))
+                    || (p.getEventCategory() != null && p.getEventCategory().getCategory() != null && p.getEventCategory().getCategory().getCode() != null && p.getEventCategory().getCategory().getCode().toUpperCase().contains("VIP"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean isNoQrPass(EventPass pass) {
+        if (pass == null) {
+            return false;
+        }
+        if ("VIP".equalsIgnoreCase(pass.getCategory())
+                || (pass.getPassCategory() != null && "VIP".equalsIgnoreCase(pass.getPassCategory().getCode()))
+                || (pass.getCategory() != null && pass.getCategory().toUpperCase().contains("VIP"))
+                || (pass.getPassNumber() != null && pass.getPassNumber().toUpperCase().contains("VIP"))
+                || (pass.getEventCategory() != null && pass.getEventCategory().getCategory() != null && pass.getEventCategory().getCategory().getName() != null && pass.getEventCategory().getCategory().getName().toUpperCase().contains("VIP"))
+                || (pass.getEventCategory() != null && pass.getEventCategory().getCategory() != null && pass.getEventCategory().getCategory().getCode() != null && pass.getEventCategory().getCategory().getCode().toUpperCase().contains("VIP"))) {
+            return true;
+        }
+        if (pass.getEventCategory() != null) {
+            if (pass.getEventCategory().getActivationMode() == com.app.eventmanagmentsystem.model.enums.ActivationMode.NO_QR_WALK_IN
+                    || !pass.getEventCategory().isQrRequired()) {
+                return true;
+            }
+        }
+        return pass.getTokenHash() == null;
     }
 
     public byte[] generateExcelTemplate() {
@@ -296,8 +363,7 @@ public class BulkPassService {
             targetPasses = passRepository.findByEventIdAndSequenceNumberBetweenOrderBySequenceNumberAsc(eventId, fromSequence, toSequence);
             if (category != null && !category.isBlank() && !"ALL".equalsIgnoreCase(category)) {
                 targetPasses = targetPasses.stream()
-                        .filter(p -> category.equalsIgnoreCase(p.getCategory()) ||
-                                     (p.getPassCategory() != null && category.equalsIgnoreCase(p.getPassCategory().getCode())))
+                        .filter(p -> matchesCategory(p, category))
                         .collect(Collectors.toList());
             }
         } else if ("INDIVIDUAL".equals(effectiveMode)) {
@@ -308,16 +374,14 @@ public class BulkPassService {
             targetPasses.sort(Comparator.comparing(p -> p.getSequenceNumber() != null ? p.getSequenceNumber() : 0L));
             if (category != null && !category.isBlank() && !"ALL".equalsIgnoreCase(category)) {
                 targetPasses = targetPasses.stream()
-                        .filter(p -> category.equalsIgnoreCase(p.getCategory()) ||
-                                     (p.getPassCategory() != null && category.equalsIgnoreCase(p.getPassCategory().getCode())))
+                        .filter(p -> matchesCategory(p, category))
                         .collect(Collectors.toList());
             }
         } else { // AUTO mode: grab earliest unactivated passes or sequential passes
             List<EventPass> unactivated = passRepository.findByEventIdAndStatusOrderBySequenceNumberAsc(eventId, PassStatus.NOT_ACTIVATED);
             if (category != null && !category.isBlank() && !"ALL".equalsIgnoreCase(category)) {
                 unactivated = unactivated.stream()
-                        .filter(p -> category.equalsIgnoreCase(p.getCategory()) ||
-                                     (p.getPassCategory() != null && category.equalsIgnoreCase(p.getPassCategory().getCode())))
+                        .filter(p -> matchesCategory(p, category))
                         .collect(Collectors.toList());
             }
             if (unactivated.size() > parsedRows.size()) {

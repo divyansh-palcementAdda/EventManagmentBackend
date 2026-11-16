@@ -26,4 +26,6 @@ public interface WhatsAppOutboxRepository extends JpaRepository<WhatsAppOutbox, 
             String referenceId,
             WhatsAppNotificationType notificationType,
             List<WhatsAppOutboxStatus> statuses);
+
+    List<WhatsAppOutbox> findByStatus(WhatsAppOutboxStatus status);
 }

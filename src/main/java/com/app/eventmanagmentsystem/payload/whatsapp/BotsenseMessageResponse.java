@@ -37,14 +37,29 @@ public class BotsenseMessageResponse {
     @Setter
     @NoArgsConstructor
     @AllArgsConstructor
+    @Builder
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ErrorDetails {
         private String message;
         private String type;
-        private Integer code;
+        private String code;
+        private String param;
 
         @JsonProperty("error_subcode")
         private Integer errorSubcode;
+
+        private Integer httpStatus;
+
+        public ErrorDetails(String message, String type, Integer httpStatus, String code) {
+            this.message = message;
+            this.type = type;
+            this.httpStatus = httpStatus;
+            this.code = code;
+        }
+
+        public ErrorDetails(String message, String type, Integer httpStatus) {
+            this(message, type, httpStatus, null);
+        }
     }
 
     public String resolveMessageId() {
