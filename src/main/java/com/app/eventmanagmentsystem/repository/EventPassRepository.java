@@ -87,7 +87,7 @@ public interface EventPassRepository extends JpaRepository<EventPass, UUID>, Jpa
     long countWithAttendeeByEventId(@Param("eventId") UUID eventId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT p FROM EventPass p WHERE p.event.id = :eventId AND p.category = :categoryCode AND p.sequenceNumber >= :fromSeq AND p.sequenceNumber <= :toSeq AND p.allotment IS NULL ORDER BY p.sequenceNumber ASC")
+    @Query("SELECT p FROM EventPass p WHERE p.event.id = :eventId AND UPPER(p.category) = UPPER(:categoryCode) AND p.sequenceNumber >= :fromSeq AND p.sequenceNumber <= :toSeq AND p.allotment IS NULL ORDER BY p.sequenceNumber ASC")
     List<EventPass> findUnallottedPassesForUpdate(
             @Param("eventId") UUID eventId,
             @Param("categoryCode") String categoryCode,
@@ -95,7 +95,7 @@ public interface EventPassRepository extends JpaRepository<EventPass, UUID>, Jpa
             @Param("toSeq") Long toSeq
     );
 
-    @Query("SELECT COUNT(p) FROM EventPass p WHERE p.event.id = :eventId AND p.category = :categoryCode AND p.sequenceNumber >= :fromSeq AND p.sequenceNumber <= :toSeq")
+    @Query("SELECT COUNT(p) FROM EventPass p WHERE p.event.id = :eventId AND UPPER(p.category) = UPPER(:categoryCode) AND p.sequenceNumber >= :fromSeq AND p.sequenceNumber <= :toSeq")
     long countByEventIdAndCategoryAndSequenceNumberBetween(
             @Param("eventId") UUID eventId,
             @Param("categoryCode") String categoryCode,
@@ -103,7 +103,7 @@ public interface EventPassRepository extends JpaRepository<EventPass, UUID>, Jpa
             @Param("toSeq") Long toSeq
     );
 
-    @Query("SELECT COUNT(p) FROM EventPass p WHERE p.event.id = :eventId AND p.category = :categoryCode AND p.sequenceNumber >= :fromSeq AND p.sequenceNumber <= :toSeq AND p.allotment IS NOT NULL")
+    @Query("SELECT COUNT(p) FROM EventPass p WHERE p.event.id = :eventId AND UPPER(p.category) = UPPER(:categoryCode) AND p.sequenceNumber >= :fromSeq AND p.sequenceNumber <= :toSeq AND p.allotment IS NOT NULL")
     long countAllottedByEventIdAndCategoryAndSequenceNumberBetween(
             @Param("eventId") UUID eventId,
             @Param("categoryCode") String categoryCode,
@@ -111,7 +111,7 @@ public interface EventPassRepository extends JpaRepository<EventPass, UUID>, Jpa
             @Param("toSeq") Long toSeq
     );
 
-    @Query("SELECT p FROM EventPass p WHERE p.event.id = :eventId AND p.category = :categoryCode ORDER BY p.sequenceNumber ASC")
+    @Query("SELECT p FROM EventPass p WHERE p.event.id = :eventId AND UPPER(p.category) = UPPER(:categoryCode) ORDER BY p.sequenceNumber ASC")
     List<EventPass> findByEventIdAndCategoryOrderBySequenceNumberAsc(
             @Param("eventId") UUID eventId,
             @Param("categoryCode") String categoryCode
