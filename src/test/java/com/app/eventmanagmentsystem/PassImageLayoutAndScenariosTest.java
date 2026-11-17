@@ -10,9 +10,11 @@ import com.app.eventmanagmentsystem.repository.EventRepository;
 import com.app.eventmanagmentsystem.service.impl.PassImageService;
 import com.app.eventmanagmentsystem.util.PassLookupUtil;
 import com.google.zxing.BinaryBitmap;
+import com.google.zxing.DecodeHintType;
 import com.google.zxing.MultiFormatReader;
 import com.google.zxing.Result;
 import com.google.zxing.client.j2se.BufferedImageLuminanceSource;
+import com.google.zxing.common.GlobalHistogramBinarizer;
 import com.google.zxing.common.HybridBinarizer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -29,7 +31,9 @@ import java.io.ByteArrayInputStream;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.EnumMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -97,11 +101,19 @@ public class PassImageLayoutAndScenariosTest {
         int qrCropX = (int) (img.getWidth() * 0.70);
         int qrCropY = (int) (img.getHeight() * 0.55);
         int qrCropW = img.getWidth() - qrCropX;
-        int qrCropH = (int) (img.getHeight() * 0.35);
+        int qrCropH = img.getHeight() - qrCropY;
 
         BufferedImage qrSub = img.getSubimage(qrCropX, qrCropY, qrCropW, qrCropH);
-        BinaryBitmap binaryBitmap = new BinaryBitmap(new HybridBinarizer(new BufferedImageLuminanceSource(qrSub)));
-        Result result = new MultiFormatReader().decode(binaryBitmap);
+        Map<DecodeHintType, Object> hints = new EnumMap<>(DecodeHintType.class);
+        hints.put(DecodeHintType.TRY_HARDER, Boolean.TRUE);
+        Result result;
+        try {
+            BinaryBitmap binaryBitmap = new BinaryBitmap(new HybridBinarizer(new BufferedImageLuminanceSource(qrSub)));
+            result = new MultiFormatReader().decode(binaryBitmap, hints);
+        } catch (Exception e) {
+            BinaryBitmap globalBitmap = new BinaryBitmap(new GlobalHistogramBinarizer(new BufferedImageLuminanceSource(qrSub)));
+            result = new MultiFormatReader().decode(globalBitmap, hints);
+        }
 
         assertThat(result).isNotNull();
         String expectedUrl = passImageService.buildActivationUrl(expectedPassNumber);

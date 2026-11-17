@@ -132,6 +132,22 @@ public class PassController {
                                 .body(imageBytes);
         }
 
+        @Operation(summary = "Get WhatsApp pass image", description = "Retrieves the WhatsApp-specific RCF pass image with embedded dynamic QR code.")
+        @SecurityRequirements
+        @GetMapping(value = "/{passId}/whatsapp-pass-image", produces = MediaType.IMAGE_PNG_VALUE)
+        public ResponseEntity<byte[]> getWhatsAppPassImage(
+                        @Parameter(description = "Pass UUID") @PathVariable UUID passId) {
+                byte[] imageBytes = passImageService.getOrGenerateWhatsAppPassImage(passId);
+                if (imageBytes == null || imageBytes.length == 0) {
+                        return ResponseEntity.notFound().build();
+                }
+                return ResponseEntity.ok()
+                                .contentType(MediaType.IMAGE_PNG)
+                                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"rcf-wa-pass-" + passId + ".png\"")
+                                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                                .body(imageBytes);
+        }
+
         @Operation(summary = "List and search passes by event", description = "Retrieves paginated passes for an event with server-side search, filtering, and sorting. Requires PASS_VIEW permission.")
         @GetMapping("/event/{eventId}")
         public ResponseEntity<ApiResponse<Page<PassResponse>>> listPasses(

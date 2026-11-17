@@ -100,6 +100,7 @@ public class SecurityConfig {
                     "/api/v1/passes/validate",
                     "/api/v1/passes/validate/**",
                     "/api/v1/passes/*/pass-image",
+                    "/api/v1/passes/*/whatsapp-pass-image",
                     "/api/v1/whatsapp/otp/**",
                     "/api/v1/whatsapp/webhook/**",
                     "/actuator/health",

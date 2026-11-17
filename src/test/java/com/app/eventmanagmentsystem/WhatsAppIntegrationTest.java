@@ -209,7 +209,7 @@ public class WhatsAppIntegrationTest {
         assertThat(sentComponents.get(0).getType()).isEqualTo("header");
         assertThat(sentComponents.get(0).getParameters().get(0).getType()).isEqualTo("image");
         assertThat(sentComponents.get(0).getParameters().get(0).getImage().getLink())
-                .isEqualTo("https://event.areyoureporting.com/api/v1/passes/" + testPass.getId() + "/pass-image");
+                .isEqualTo("https://event.areyoureporting.com/api/v1/passes/" + testPass.getId() + "/whatsapp-pass-image");
         assertThat(sentComponents.get(0).getParameters().get(0).getImage().getId()).isNull();
 
         // Verify NO body components exist

@@ -464,26 +464,26 @@ public class WhatsAppOutboxProcessor {
                 throw new IllegalStateException("Invalid pass reference ID: " + item.getReferenceId());
             }
 
-            // Ensure the attendee-specific composite pass image is generated and saved on disk
-            byte[] generatedImageBytes = passImageService.getOrGeneratePassImage(passUuid);
+            // Ensure the attendee-specific WhatsApp pass image is generated and saved on disk
+            byte[] generatedImageBytes = passImageService.getOrGenerateWhatsAppPassImage(passUuid);
             if (generatedImageBytes == null || generatedImageBytes.length == 0) {
-                log.error("Pass image generation produced empty/null payload for pass ID [{}], outbox item [{}] - aborting dispatch",
+                log.error("WhatsApp pass image generation produced empty/null payload for pass ID [{}], outbox item [{}] - aborting dispatch",
                         passUuid, item.getId());
-                throw new IllegalStateException("Pass image generation failed for pass ID: " + passUuid);
+                throw new IllegalStateException("WhatsApp pass image generation failed for pass ID: " + passUuid);
             }
 
-            // Construct supported media reference: prefer image.link with stable HTTPS public URL
+            // Construct supported media reference: prefer image.link with stable HTTPS public URL for WhatsApp pass image
             String publicLink = (String) payload.get("imageLink");
-            if (publicLink == null || publicLink.isBlank()) {
+            if (publicLink == null || publicLink.isBlank() || publicLink.endsWith("/pass-image")) {
                 publicLink = (String) payload.get("imageUrl");
             }
-            if (publicLink == null || publicLink.isBlank()) {
+            if (publicLink == null || publicLink.isBlank() || publicLink.endsWith("/pass-image")) {
                 String baseUrl = botsenseProperties.getMediaPublicBaseUrl();
                 if (baseUrl == null || baseUrl.isBlank()) {
                     baseUrl = "https://event.areyoureporting.com";
                 }
                 baseUrl = baseUrl.replaceAll("/+$", "");
-                publicLink = baseUrl + "/api/v1/passes/" + passUuid + "/pass-image";
+                publicLink = baseUrl + "/api/v1/passes/" + passUuid + "/whatsapp-pass-image";
             }
 
             BotsenseMessageRequest.MediaContent mediaContent;

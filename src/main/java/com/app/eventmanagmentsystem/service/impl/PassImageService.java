@@ -25,6 +25,7 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.geom.AffineTransform;
+import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -112,6 +113,61 @@ public class PassImageService {
             }
         }
         return null;
+    }
+
+    /* =========================================================================
+     * WhatsApp-Specific Pass Image Storage & Cache (Variant B)
+     * Stored separately in uploads/passes/whatsapp/{passUuid}.png
+     * ========================================================================= */
+
+    private Path getWhatsAppPassUploadDir() {
+        Path path = Paths.get(baseUploadDir, "passes", "whatsapp");
+        try {
+            if (!Files.exists(path)) {
+                Files.createDirectories(path);
+            }
+        } catch (IOException e) {
+            log.error("Failed to create WhatsApp pass image directory: {}", e.getMessage());
+        }
+        return path;
+    }
+
+    public Path getWhatsAppPassImagePath(UUID passId) {
+        return getWhatsAppPassUploadDir().resolve(passId.toString() + ".png");
+    }
+
+    public boolean hasWhatsAppPassImage(UUID passId) {
+        if (passId == null) return false;
+        Path file = getWhatsAppPassImagePath(passId);
+        return Files.exists(file) && Files.isRegularFile(file);
+    }
+
+    public byte[] getWhatsAppPassImage(UUID passId) {
+        if (passId == null) return null;
+        Path file = getWhatsAppPassImagePath(passId);
+        if (Files.exists(file)) {
+            try {
+                return Files.readAllBytes(file);
+            } catch (IOException e) {
+                log.error("Failed to read WhatsApp pass image for {}: {}", passId, e.getMessage());
+            }
+        }
+        return null;
+    }
+
+    public String saveWhatsAppPassImage(UUID passId, byte[] imageBytes) {
+        Path target = getWhatsAppPassImagePath(passId);
+        Path tempTarget = target.resolveSibling(target.getFileName().toString() + ".tmp." + UUID.randomUUID());
+        try {
+            Files.write(tempTarget, imageBytes);
+            Files.move(tempTarget, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            log.info("Saved WhatsApp pass image for pass {} at {} ({} bytes)", passId, target, imageBytes.length);
+            return target.toString();
+        } catch (IOException e) {
+            try { Files.deleteIfExists(tempTarget); } catch (Exception ignored) {}
+            log.error("Failed to save WhatsApp pass image for {}: {}", passId, e.getMessage());
+            throw new RuntimeException("Could not write WhatsApp pass image: " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -526,6 +582,125 @@ public class PassImageService {
         } catch (Exception e) {
             log.error("Failed to generate fallback badge image: {}", e.getMessage());
             return new byte[0];
+        }
+    }
+
+    /* =========================================================================
+     * WhatsApp-Specific RCF Pass Image Generator (Variant B)
+     * Template: /passes/rcf wa.png (1080 x 1350)
+     * Preserves original artwork untouched; embeds individual dynamic pass QR code
+     * centered inside the designated white square (x=629, y=653, w=274, h=274).
+     * ========================================================================= */
+
+    public byte[] getOrGenerateWhatsAppPassImage(UUID passId) {
+        return getOrGenerateWhatsAppPassImage(passId, false);
+    }
+
+    public byte[] getOrGenerateWhatsAppPassImage(UUID passId, boolean forceRegenerate) {
+        if (!forceRegenerate) {
+            byte[] existing = getWhatsAppPassImage(passId);
+            if (existing != null && existing.length > 0) {
+                return existing;
+            }
+        }
+
+        PassImageSnapshot snapshot = passImageDataLoader.loadSnapshot(passId);
+        return generateAndSaveWhatsAppPassImage(snapshot);
+    }
+
+    public byte[] generateAndSaveWhatsAppPassImage(EventPass pass) {
+        if (pass == null) {
+            throw new IllegalArgumentException("Pass entity cannot be null");
+        }
+        PassImageSnapshot snapshot = passImageDataLoader.createSnapshotFromEntity(pass);
+        return generateAndSaveWhatsAppPassImage(snapshot);
+    }
+
+    public byte[] generateAndSaveWhatsAppPassImage(PassImageSnapshot snapshot) {
+        if (snapshot == null) {
+            throw new IllegalArgumentException("Pass snapshot cannot be null");
+        }
+        try {
+            BufferedImage templateImg = null;
+            try (InputStream in = getClass().getResourceAsStream("/passes/rcf wa.png")) {
+                if (in != null) {
+                    templateImg = ImageIO.read(in);
+                }
+            }
+
+            if (templateImg == null) {
+                log.warn("WhatsApp pass background template (/passes/rcf wa.png) not found on classpath, falling back to frontend pass image.");
+                return generateAndSavePassImage(snapshot);
+            }
+
+            int width = templateImg.getWidth();   // 1080
+            int height = templateImg.getHeight(); // 1350
+
+            BufferedImage composite = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g2d = composite.createGraphics();
+
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+
+            // 1. Draw original background artwork completely untouched
+            g2d.drawImage(templateImg, 0, 0, null);
+
+            // 2. Designated blank square coordinates: dynamically scaled relative to 1080x1350 baseline
+            double scaleX = (double) width / 1080.0;
+            double scaleY = (double) height / 1350.0;
+
+            int boxX = (int) Math.round(629 * scaleX);
+            int boxY = (int) Math.round(653 * scaleY);
+            int boxW = (int) Math.round(274 * scaleX);
+            int boxH = (int) Math.round(274 * scaleY);
+            int cornerRadius = (int) Math.round(32 * scaleX);
+
+            // Render high-contrast solid white rounded backing inside the designated box
+            g2d.setColor(Color.WHITE);
+            g2d.fill(new RoundRectangle2D.Float(boxX, boxY, boxW, boxH, cornerRadius, cornerRadius));
+
+            // 3. Generate QR code or Walk-in badge
+            boolean isNoQr = snapshot.isNoQr();
+            if (isNoQr) {
+                g2d.setColor(new Color(0x92, 0x40, 0x0e));
+                g2d.setFont(new Font("SansSerif", Font.BOLD, (int) Math.round(32 * scaleX)));
+                FontMetrics fm = g2d.getFontMetrics();
+                String text1 = "WALK-IN";
+                g2d.drawString(text1, boxX + (boxW - fm.stringWidth(text1)) / 2, boxY + (boxH / 2) - (int) Math.round(10 * scaleY));
+
+                g2d.setColor(new Color(0xb4, 0x53, 0x09));
+                g2d.setFont(new Font("SansSerif", Font.BOLD, (int) Math.round(22 * scaleX)));
+                fm = g2d.getFontMetrics();
+                String text2 = "NO QR";
+                g2d.drawString(text2, boxX + (boxW - fm.stringWidth(text2)) / 2, boxY + (boxH / 2) + (int) Math.round(26 * scaleY));
+            } else {
+                String identifier = snapshot.getPassNumber() != null ? snapshot.getPassNumber() : snapshot.getPassId().toString();
+                String qrData = buildActivationUrl(identifier);
+
+                // High contrast QR code centered in the box with proportional padding
+                int qrSize = (int) Math.round(246 * scaleX);
+                BufferedImage qrImage = generateQrCodeImage(qrData, qrSize, qrSize);
+                if (qrImage != null) {
+                    int qrX = boxX + (boxW - qrSize) / 2;
+                    int qrY = boxY + (boxH - qrSize) / 2;
+                    g2d.drawImage(qrImage, qrX, qrY, null);
+                }
+            }
+
+            g2d.dispose();
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ImageIO.write(composite, "PNG", baos);
+            byte[] bytes = baos.toByteArray();
+
+            // Save atomically to WhatsApp cache directory
+            saveWhatsAppPassImage(snapshot.getPassId(), bytes);
+            return bytes;
+
+        } catch (Exception e) {
+            log.error("Failed to generate WhatsApp pass image for {}: {}", snapshot.getPassId(), e.getMessage(), e);
+            throw new RuntimeException("Could not generate WhatsApp pass image: " + e.getMessage(), e);
         }
     }
 
