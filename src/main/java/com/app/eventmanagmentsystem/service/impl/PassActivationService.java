@@ -3,6 +3,7 @@ package com.app.eventmanagmentsystem.service.impl;
 import com.app.eventmanagmentsystem.exceptions.*;
 import com.app.eventmanagmentsystem.model.*;
 import com.app.eventmanagmentsystem.model.enums.*;
+import com.app.eventmanagmentsystem.payload.category.FormFieldDto;
 import com.app.eventmanagmentsystem.payload.category.FormSchemaResponse;
 import com.app.eventmanagmentsystem.payload.event.EventDayResponse;
 import com.app.eventmanagmentsystem.payload.pass.ActivatePassRequest;
@@ -12,6 +13,7 @@ import com.app.eventmanagmentsystem.payload.pass.ValidatePassResponse;
 import com.app.eventmanagmentsystem.repository.*;
 import com.app.eventmanagmentsystem.service.interfaces.AuditLogService;
 import com.app.eventmanagmentsystem.util.PassLookupUtil;
+import com.app.eventmanagmentsystem.util.PhoneNumberUtil;
 import com.app.eventmanagmentsystem.util.QrTokenUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,8 +22,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -58,6 +60,8 @@ public class PassActivationService {
     private final AuditLogService auditLogService;
     private final WhatsAppOtpService whatsAppOtpService;
     private final WhatsAppNotificationService whatsAppNotificationService;
+
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9+_.-]+@(.+)$");
 
     @Transactional(readOnly = true)
     public ValidatePassResponse validatePass(String rawToken) {
@@ -182,87 +186,113 @@ public class PassActivationService {
             throw new InvalidRequestException("Walk-in passes cannot be self-activated via QR.");
         }
 
-        // Validate dynamic schema answers if form version is published
+        // 1. Resolve category dynamic fields configuration (source of truth)
         RegistrationFormVersion version = epc != null ? epc.getPublishedFormVersion() : null;
-        if (version != null && request.getAnswers() != null) {
-            formBuilderService.validateAnswersAgainstSchema(version, request.getAnswers());
+        List<FormFieldDto> categoryFields;
+        if (version != null && version.getSchemaSnapshot() != null) {
+            categoryFields = formBuilderService.parseSchemaSnapshot(version.getSchemaSnapshot());
+        } else {
+            String catCode = epc != null && epc.getPassCategory() != null ? epc.getPassCategory().getCode() : pass.getCategory();
+            categoryFields = formBuilderService.getDefaultFieldsForCategory(catCode);
         }
 
-        // If WhatsApp OTP verification is required, validate verification token
+        // 2. Dynamic Field Validation against category configuration
+        Map<String, String> validationErrors = new HashMap<>();
+        for (FormFieldDto field : categoryFields) {
+            if (!field.isVisible() || !field.isActive()) {
+                continue;
+            }
+            String val = resolveSubmittedValue(request, field.getFieldKey());
+            if (field.isRequired() && (val == null || val.isBlank())) {
+                validationErrors.put(field.getFieldKey(), field.getLabel() + " is required.");
+                continue;
+            }
+            if (val != null && !val.isBlank()) {
+                try {
+                    formBuilderService.validateFieldValue(field, val);
+                } catch (InvalidRequestException ire) {
+                    validationErrors.put(field.getFieldKey(), ire.getMessage());
+                }
+            }
+        }
+        if (!validationErrors.isEmpty()) {
+            String firstMessage = validationErrors.values().iterator().next();
+            throw new InvalidRequestException(firstMessage, validationErrors);
+        }
+
+        // 3. Resolve & normalize mobile number (enforce one mobile number per attendee per event)
+        String rawMobile = resolveSubmittedValue(request, "mobileNumber");
+        if (rawMobile == null || rawMobile.isBlank()) {
+            rawMobile = request.getAttendeeMobileNumber();
+        }
+        String normalizedMobile = PhoneNumberUtil.normalize(rawMobile);
+        if (normalizedMobile == null || normalizedMobile.isBlank()) {
+            throw new InvalidRequestException("mobileNumber", "Mobile number is required and must be valid.");
+        }
+
+        if (attendeeRepository.existsByEventIdAndNormalizedMobileNumber(event.getId(), normalizedMobile)) {
+            throw new DuplicateResourceException(
+                    "This mobile number is already registered for this event. Please use the registered attendee's existing pass or contact the event organizer.");
+        }
+
+        // 4. If WhatsApp OTP verification is required, validate verification token
         if (whatsAppOtpService.isOtpRequired(event.getId())) {
             boolean verified = whatsAppOtpService.validateVerificationToken(
-                    request.getAttendeeMobileNumber(), request.getVerificationToken(), event.getId());
+                    rawMobile, request.getVerificationToken(), event.getId());
             if (!verified) {
-                throw new InvalidRequestException("WhatsApp OTP verification is required for mobile number " + request.getAttendeeMobileNumber());
+                throw new InvalidRequestException("attendeeMobileNumber", "WhatsApp OTP verification is required for mobile number " + rawMobile);
             }
         }
 
-        // Prevent duplicate attendee-email per event
-        String rawEmail = request.getAttendeeEmail();
-        if ((rawEmail == null || rawEmail.isBlank()) && request.getAnswers() != null && request.getAnswers().containsKey("email")) {
-            rawEmail = String.valueOf(request.getAnswers().get("email"));
-        }
-        if (rawEmail == null || rawEmail.isBlank()) {
-            throw new InvalidRequestException("Attendee email is required.");
-        }
-        String normalizedEmail = rawEmail.toLowerCase().trim();
-
-        if (attendeeRepository.existsByEventAndEmail(event.getId(), normalizedEmail)) {
-            throw new DuplicateResourceException(
-                    "An attendee with this email is already registered for this event.");
-        }
-
-        String rawFullName = request.getAttendeeFullName();
-        if ((rawFullName == null || rawFullName.isBlank()) && request.getAnswers() != null && request.getAnswers().containsKey("fullName")) {
-            rawFullName = String.valueOf(request.getAnswers().get("fullName"));
+        // 5. Full Name
+        String rawFullName = resolveSubmittedValue(request, "fullName");
+        if (rawFullName == null || rawFullName.isBlank()) {
+            rawFullName = request.getAttendeeFullName();
         }
         if (rawFullName == null || rawFullName.isBlank()) {
-            throw new InvalidRequestException("Attendee full name is required.");
+            throw new InvalidRequestException("fullName", "Attendee full name is required.");
         }
 
-        // Create attendee
+        // 6. Email validation (Format check only; email uniqueness restriction removed)
+        String rawEmail = resolveSubmittedValue(request, "email");
+        if (rawEmail == null || rawEmail.isBlank()) {
+            rawEmail = request.getAttendeeEmail();
+        }
+        String normalizedEmail;
+        if (rawEmail != null && !rawEmail.isBlank()) {
+            if (!EMAIL_PATTERN.matcher(rawEmail.trim()).matches()) {
+                throw new InvalidRequestException("email", "Invalid email format.");
+            }
+            normalizedEmail = rawEmail.toLowerCase().trim();
+        } else {
+            normalizedEmail = "attendee-" + UUID.randomUUID().toString().substring(0, 8) + "@event.local";
+        }
+
+        // 7. Create Attendee record populated from resolved dynamic values
         Attendee attendee = new Attendee();
         attendee.setEvent(event);
         attendee.setFullName(rawFullName.trim());
         attendee.setEmail(normalizedEmail);
-        attendee.setMobileNumber(request.getAttendeeMobileNumber() != null ? request.getAttendeeMobileNumber().trim() : null);
+        attendee.setMobileNumber(rawMobile.trim()); // Automatically normalizes and sets normalizedMobileNumber
 
-        if ("STUDENT".equalsIgnoreCase(pass.getCategory())) {
-            String college = request.getAttendeeCollege() != null && !request.getAttendeeCollege().isBlank()
-                    ? request.getAttendeeCollege().trim()
-                    : (request.getAttendeeOrganization() != null ? request.getAttendeeOrganization().trim() : "");
-            if (college.isBlank() && request.getAnswers() != null && request.getAnswers().containsKey("college")) {
-                college = String.valueOf(request.getAnswers().get("college")).trim();
-            }
-            if (college.isBlank()) {
-                throw new InvalidRequestException("College or institution is required for student pass registration.");
-            }
-            String course = request.getAttendeeCourse() != null ? request.getAttendeeCourse().trim() : "";
-            if (course.isBlank() && request.getAnswers() != null && request.getAnswers().containsKey("course")) {
-                course = String.valueOf(request.getAnswers().get("course")).trim();
-            }
-            if (course.isBlank()) {
-                throw new InvalidRequestException("Course or program is required for student pass registration.");
-            }
-            attendee.setCollege(college);
-            attendee.setOrganization(college);
-            attendee.setCourse(course);
-            if (request.getAttendeeYearSemester() != null && !request.getAttendeeYearSemester().isBlank()) {
-                attendee.setYearSemester(request.getAttendeeYearSemester().trim());
-            }
-            if (request.getAttendeeStudentId() != null && !request.getAttendeeStudentId().isBlank()) {
-                attendee.setStudentId(request.getAttendeeStudentId().trim());
-            }
-            attendee.setDesignation(request.getAttendeeDesignation() != null && !request.getAttendeeDesignation().isBlank()
-                    ? request.getAttendeeDesignation().trim() : "Student");
-        } else {
-            if (request.getAttendeeOrganization() != null && !request.getAttendeeOrganization().isBlank()) {
-                attendee.setOrganization(request.getAttendeeOrganization().trim());
-            }
-            if (request.getAttendeeDesignation() != null && !request.getAttendeeDesignation().isBlank()) {
-                attendee.setDesignation(request.getAttendeeDesignation().trim());
-            }
+        String college = resolveSubmittedValue(request, "college");
+        if (college == null || college.isBlank()) {
+            college = resolveSubmittedValue(request, "organization");
         }
+        attendee.setCollege(college != null && !college.isBlank() ? college.trim() : null);
+        attendee.setOrganization(college != null && !college.isBlank() ? college.trim() : null);
+
+        String course = resolveSubmittedValue(request, "course");
+        attendee.setCourse(course != null && !course.isBlank() ? course.trim() : null);
+
+        String yearSemester = resolveSubmittedValue(request, "yearSemester");
+        attendee.setYearSemester(yearSemester != null && !yearSemester.isBlank() ? yearSemester.trim() : null);
+
+        String studentId = resolveSubmittedValue(request, "studentId");
+        attendee.setStudentId(studentId != null && !studentId.isBlank() ? studentId.trim() : null);
+
+        String designation = resolveSubmittedValue(request, "designation");
+        attendee.setDesignation(designation != null && !designation.isBlank() ? designation.trim() : null);
 
         attendee.setRegistrationStatus(RegistrationStatus.CONFIRMED);
         attendee.setRegisteredAt(now);
@@ -437,5 +467,82 @@ public class PassActivationService {
         } catch (Exception e) {
             log.error("Failed to enqueue activation email for pass {}: {}", pass.getId(), e.getMessage());
         }
+    }
+
+    private String resolveSubmittedValue(ActivatePassRequest request, String fieldKey) {
+        if (request == null || fieldKey == null) return null;
+
+        // 1. Direct answers map lookup
+        if (request.getAnswers() != null) {
+            if (request.getAnswers().containsKey(fieldKey)) {
+                Object v = request.getAnswers().get(fieldKey);
+                if (v != null && !String.valueOf(v).isBlank()) {
+                    return String.valueOf(v).trim();
+                }
+            }
+            // Case-insensitive lookup in answers map
+            for (Map.Entry<String, Object> entry : request.getAnswers().entrySet()) {
+                if (entry.getKey().equalsIgnoreCase(fieldKey)) {
+                    Object v = entry.getValue();
+                    if (v != null && !String.valueOf(v).isBlank()) {
+                        return String.valueOf(v).trim();
+                    }
+                }
+            }
+        }
+
+        // 2. DTO specific getters
+        switch (fieldKey.toLowerCase()) {
+            case "fullname":
+                if (request.getAttendeeFullName() != null && !request.getAttendeeFullName().isBlank()) {
+                    return request.getAttendeeFullName().trim();
+                }
+                break;
+            case "email":
+                if (request.getAttendeeEmail() != null && !request.getAttendeeEmail().isBlank()) {
+                    return request.getAttendeeEmail().trim();
+                }
+                break;
+            case "mobilenumber":
+            case "mobile":
+            case "phone":
+                if (request.getAttendeeMobileNumber() != null && !request.getAttendeeMobileNumber().isBlank()) {
+                    return request.getAttendeeMobileNumber().trim();
+                }
+                break;
+            case "college":
+                if (request.getAttendeeCollege() != null && !request.getAttendeeCollege().isBlank()) {
+                    return request.getAttendeeCollege().trim();
+                }
+                break;
+            case "course":
+                if (request.getAttendeeCourse() != null && !request.getAttendeeCourse().isBlank()) {
+                    return request.getAttendeeCourse().trim();
+                }
+                break;
+            case "organization":
+                if (request.getAttendeeOrganization() != null && !request.getAttendeeOrganization().isBlank()) {
+                    return request.getAttendeeOrganization().trim();
+                }
+                break;
+            case "designation":
+                if (request.getAttendeeDesignation() != null && !request.getAttendeeDesignation().isBlank()) {
+                    return request.getAttendeeDesignation().trim();
+                }
+                break;
+            case "yearsemester":
+                if (request.getAttendeeYearSemester() != null && !request.getAttendeeYearSemester().isBlank()) {
+                    return request.getAttendeeYearSemester().trim();
+                }
+                break;
+            case "studentid":
+                if (request.getAttendeeStudentId() != null && !request.getAttendeeStudentId().isBlank()) {
+                    return request.getAttendeeStudentId().trim();
+                }
+                break;
+            default:
+                break;
+        }
+        return null;
     }
 }

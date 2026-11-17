@@ -1,5 +1,37 @@
 package com.app.eventmanagmentsystem.service.impl;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
 import com.app.eventmanagmentsystem.exceptions.DuplicateResourceException;
 import com.app.eventmanagmentsystem.exceptions.InvalidRequestException;
 import com.app.eventmanagmentsystem.exceptions.ResourceNotFoundException;
@@ -8,26 +40,31 @@ import com.app.eventmanagmentsystem.model.EmailOutbox;
 import com.app.eventmanagmentsystem.model.Event;
 import com.app.eventmanagmentsystem.model.EventDay;
 import com.app.eventmanagmentsystem.model.EventPass;
-import com.app.eventmanagmentsystem.model.enums.*;
+import com.app.eventmanagmentsystem.model.enums.AuditOutcome;
+import com.app.eventmanagmentsystem.model.enums.EmailOutboxStatus;
+import com.app.eventmanagmentsystem.model.enums.EventStatus;
+import com.app.eventmanagmentsystem.model.enums.NotificationType;
+import com.app.eventmanagmentsystem.model.enums.PassCategory;
+import com.app.eventmanagmentsystem.model.enums.PassStatus;
+import com.app.eventmanagmentsystem.model.enums.RegistrationStatus;
 import com.app.eventmanagmentsystem.payload.event.EventDayResponse;
-import com.app.eventmanagmentsystem.payload.pass.*;
-import com.app.eventmanagmentsystem.repository.*;
+import com.app.eventmanagmentsystem.payload.pass.AssignmentPreviewItem;
+import com.app.eventmanagmentsystem.payload.pass.BulkActivationAssignmentDto;
+import com.app.eventmanagmentsystem.payload.pass.BulkActivationConfirmRequest;
+import com.app.eventmanagmentsystem.payload.pass.BulkActivationConfirmResponse;
+import com.app.eventmanagmentsystem.payload.pass.BulkActivationPreviewResponse;
+import com.app.eventmanagmentsystem.payload.pass.PassExportItemResponse;
+import com.app.eventmanagmentsystem.payload.pass.PassStatsResponse;
+import com.app.eventmanagmentsystem.repository.AttendeeRepository;
+import com.app.eventmanagmentsystem.repository.CheckInRepository;
+import com.app.eventmanagmentsystem.repository.EmailOutboxRepository;
+import com.app.eventmanagmentsystem.repository.EventPassRepository;
+import com.app.eventmanagmentsystem.repository.EventRepository;
 import com.app.eventmanagmentsystem.service.interfaces.AuditLogService;
+import com.app.eventmanagmentsystem.util.PhoneNumberUtil;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
-
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.time.Instant;
-import java.util.*;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -393,7 +430,7 @@ public class BulkPassService {
 
         // 3. Match rows to passes and analyze conflicts
         List<AssignmentPreviewItem> previewItems = new ArrayList<>();
-        Set<String> seenEmailsInSpreadsheet = new HashSet<>();
+        Set<String> seenMobilesInSpreadsheet = new HashSet<>();
         int eligibleCount = 0;
         int conflictActivatedCount = 0;
         int conflictRevokedCount = 0;
@@ -428,30 +465,37 @@ public class BulkPassService {
                     resultStatus = "INVALID_DATA";
                     conflictReason = "Valid email address is required.";
                     invalidRowCount++;
-                } else if (seenEmailsInSpreadsheet.contains(attendeeRow.email.toLowerCase())) {
+                } else if (attendeeRow.mobileNumber == null || !PhoneNumberUtil.isValid(attendeeRow.mobileNumber)) {
                     resultStatus = "INVALID_DATA";
-                    conflictReason = "Duplicate email within uploaded spreadsheet.";
+                    conflictReason = "Valid mobile number is required.";
                     invalidRowCount++;
                 } else {
-                    seenEmailsInSpreadsheet.add(attendeeRow.email.toLowerCase());
-
-                    // Check Pass Status
-                    if (pass.getStatus() == PassStatus.REVOKED) {
-                        resultStatus = "CONFLICT_REVOKED";
-                        conflictReason = "Pass is revoked and cannot be activated.";
-                        conflictRevokedCount++;
-                    } else if (pass.getStatus() == PassStatus.ACTIVATED) {
-                        resultStatus = "CONFLICT_ALREADY_ACTIVATED";
-                        String existingHolder = pass.getAttendee() != null ? pass.getAttendee().getFullName() : "another attendee";
-                        conflictReason = "Pass is already activated for " + existingHolder + ".";
-                        conflictActivatedCount++;
-                    } else if (attendeeRepository.existsByEventAndEmail(eventId, attendeeRow.email.toLowerCase().trim())) {
-                        resultStatus = "CONFLICT_ATTENDEE_EXISTS";
-                        conflictReason = "Attendee with email " + attendeeRow.email + " is already registered for this event.";
-                        conflictAttendeeExistsCount++;
+                    String normMobile = PhoneNumberUtil.normalize(attendeeRow.mobileNumber);
+                    if (seenMobilesInSpreadsheet.contains(normMobile)) {
+                        resultStatus = "INVALID_DATA";
+                        conflictReason = "Duplicate mobile number within uploaded spreadsheet.";
+                        invalidRowCount++;
                     } else {
-                        resultStatus = "ELIGIBLE";
-                        eligibleCount++;
+                        seenMobilesInSpreadsheet.add(normMobile);
+
+                        // Check Pass Status
+                        if (pass.getStatus() == PassStatus.REVOKED) {
+                            resultStatus = "CONFLICT_REVOKED";
+                            conflictReason = "Pass is revoked and cannot be activated.";
+                            conflictRevokedCount++;
+                        } else if (pass.getStatus() == PassStatus.ACTIVATED) {
+                            resultStatus = "CONFLICT_ALREADY_ACTIVATED";
+                            String existingHolder = pass.getAttendee() != null ? pass.getAttendee().getFullName() : "another attendee";
+                            conflictReason = "Pass is already activated for " + existingHolder + ".";
+                            conflictActivatedCount++;
+                        } else if (attendeeRepository.existsByEventIdAndNormalizedMobileNumber(eventId, normMobile)) {
+                            resultStatus = "CONFLICT_ATTENDEE_EXISTS";
+                            conflictReason = "Attendee with mobile number " + attendeeRow.mobileNumber + " is already registered for this event.";
+                            conflictAttendeeExistsCount++;
+                        } else {
+                            resultStatus = "ELIGIBLE";
+                            eligibleCount++;
+                        }
                     }
                 }
             }
@@ -542,12 +586,15 @@ public class BulkPassService {
             throw new InvalidRequestException("Assignments list cannot be empty.");
         }
 
-        // Check for duplicate emails within the request batch
-        Set<String> emailsInBatch = new HashSet<>();
+        // Check for duplicate mobile numbers within the request batch
+        Set<String> mobilesInBatch = new HashSet<>();
         for (BulkActivationAssignmentDto a : assignments) {
-            String norm = a.getAttendeeEmail().toLowerCase().trim();
-            if (!emailsInBatch.add(norm)) {
-                throw new DuplicateResourceException("Duplicate email in activation batch: " + a.getAttendeeEmail());
+            if (a.getAttendeeMobileNumber() == null || !PhoneNumberUtil.isValid(a.getAttendeeMobileNumber())) {
+                throw new InvalidRequestException("Valid mobile number is required for attendee " + a.getAttendeeFullName());
+            }
+            String norm = PhoneNumberUtil.normalize(a.getAttendeeMobileNumber());
+            if (!mobilesInBatch.add(norm)) {
+                throw new DuplicateResourceException("Duplicate mobile number in activation batch: " + a.getAttendeeMobileNumber());
             }
         }
 
@@ -578,9 +625,9 @@ public class BulkPassService {
                 throw new InvalidRequestException("Pass " + pass.getPassNumber() + " is already activated.");
             }
 
-            String normEmail = a.getAttendeeEmail().toLowerCase().trim();
-            if (attendeeRepository.existsByEventAndEmail(event.getId(), normEmail)) {
-                throw new DuplicateResourceException("An attendee with email " + a.getAttendeeEmail() + " is already registered.");
+            String normMobile = PhoneNumberUtil.normalize(a.getAttendeeMobileNumber());
+            if (attendeeRepository.existsByEventIdAndNormalizedMobileNumber(event.getId(), normMobile)) {
+                throw new DuplicateResourceException("This mobile number is already registered for this event. Please use the registered attendee's existing pass or contact the event organizer.");
             }
         }
 

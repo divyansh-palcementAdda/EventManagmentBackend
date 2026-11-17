@@ -17,6 +17,7 @@ import com.app.eventmanagmentsystem.repository.EventPassRepository;
 import com.app.eventmanagmentsystem.repository.EventRepository;
 import com.app.eventmanagmentsystem.repository.specification.AttendeeSpecification;
 import com.app.eventmanagmentsystem.service.interfaces.AuditLogService;
+import com.app.eventmanagmentsystem.util.PhoneNumberUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -119,16 +120,18 @@ public class AttendeeService {
         }
 
         String normalizedEmail = request.getEmail().toLowerCase().trim();
-        if (attendeeRepository.existsByEventAndEmail(event.getId(), normalizedEmail)) {
+        String rawMobile = request.getMobileNumber();
+        String normalizedMobile = PhoneNumberUtil.normalize(rawMobile);
+        if (normalizedMobile != null && attendeeRepository.existsByEventIdAndNormalizedMobileNumber(event.getId(), normalizedMobile)) {
             throw new DuplicateResourceException(
-                    "An attendee with email '" + normalizedEmail + "' is already registered for event " + event.getEventCode());
+                    "This mobile number is already registered for this event. Please use the registered attendee's existing pass or contact the event organizer.");
         }
 
         Attendee attendee = new Attendee();
         attendee.setEvent(event);
         attendee.setFullName(request.getFullName().trim());
         attendee.setEmail(normalizedEmail);
-        attendee.setMobileNumber(request.getMobileNumber() != null ? request.getMobileNumber().trim() : null);
+        attendee.setMobileNumber(rawMobile != null ? rawMobile.trim() : null);
         attendee.setOrganization(request.getOrganization() != null ? request.getOrganization().trim() : null);
         attendee.setDesignation(request.getDesignation() != null ? request.getDesignation().trim() : null);
         attendee.setRegistrationStatus(RegistrationStatus.CONFIRMED);
@@ -153,7 +156,13 @@ public class AttendeeService {
             attendee.setFullName(request.getFullName().trim());
         }
         if (request.getMobileNumber() != null) {
-            attendee.setMobileNumber(request.getMobileNumber().trim());
+            String rawMobile = request.getMobileNumber().trim();
+            String normalizedMobile = PhoneNumberUtil.normalize(rawMobile);
+            if (normalizedMobile != null && attendeeRepository.existsByEventIdAndNormalizedMobileNumberAndIdNot(attendee.getEvent().getId(), normalizedMobile, id)) {
+                throw new DuplicateResourceException(
+                        "This mobile number is already registered for this event. Please use the registered attendee's existing pass or contact the event organizer.");
+            }
+            attendee.setMobileNumber(rawMobile);
         }
         if (request.getOrganization() != null) {
             attendee.setOrganization(request.getOrganization().trim());

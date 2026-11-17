@@ -45,7 +45,6 @@ public class GlobalExceptionHandler {
         // ===== 1. Custom Domain Exceptions =====
 
     @ExceptionHandler(AppException.class)
-
         public ResponseEntity<ErrorResponse> handleAppException(AppException ex, HttpServletRequest request) {
                 log.warn("Application business exception [{}]: {} on path: {}",
                                 ex.getErrorCode(), ex.getMessage(), request.getRequestURI());
@@ -54,6 +53,9 @@ public class GlobalExceptionHandler {
                                 ex.getMessage(),
                                 ex.getHttpStatus().value(),
                                 request.getRequestURI());
+                if (ex instanceof InvalidRequestException ire && !ire.getFieldErrors().isEmpty()) {
+                        error.setFieldErrors(ire.getFieldErrors());
+                }
                 return ResponseEntity.status(ex.getHttpStatus()).body(error);
         }
 
@@ -223,9 +225,17 @@ public class GlobalExceptionHandler {
                 String detail = ex.getMostSpecificCause() != null ? ex.getMostSpecificCause().getMessage()
                                 : ex.getMessage();
                 log.warn("Data integrity conflict on path {}: {}", request.getRequestURI(), detail);
+                
+                String errorCode = "DATA_CONFLICT";
+                String message = "Database operation conflicted with existing records or foreign key constraints.";
+                if (detail != null && (detail.contains("uq_attendee_event_mobile") || detail.contains("normalized_mobile_number"))) {
+                        errorCode = "DUPLICATE_RESOURCE";
+                        message = "This mobile number is already registered for this event. Please use the registered attendee's existing pass or contact the event organizer.";
+                }
+
                 ErrorResponse error = new ErrorResponse(
-                                "DATA_CONFLICT",
-                                "Database operation conflicted with existing records or foreign key constraints.",
+                                errorCode,
+                                message,
                                 HttpStatus.CONFLICT.value(),
                                 request.getRequestURI());
                 return ResponseEntity.status(HttpStatus.CONFLICT).body(error);

@@ -205,6 +205,7 @@ class UserRolePermissionAttendeeTest {
         attReq.setEventId(testEvent.getId());
         attReq.setFullName("Alice Attendee");
         attReq.setEmail(attendeeEmail);
+        attReq.setMobileNumber("9876543210");
         attReq.setOrganization("Tech Corp");
         attReq.setDesignation("Software Engineer");
 
@@ -214,10 +215,20 @@ class UserRolePermissionAttendeeTest {
         assertThat(createdAtt.getPassId()).isNull();
         assertThat(createdAtt.isHasPass()).isFalse();
 
-        // Duplicate registration for same event must fail
+        // Duplicate registration for same mobile number within event must fail
         assertThatThrownBy(() -> attendeeService.createAttendee(attReq))
                 .isInstanceOf(DuplicateResourceException.class)
-                .hasMessageContaining("already registered for event");
+                .hasMessageContaining("already registered for this event");
+
+        // Same email with different mobile number must succeed
+        CreateAttendeeRequest diffMobileReq = new CreateAttendeeRequest();
+        diffMobileReq.setEventId(testEvent.getId());
+        diffMobileReq.setFullName("Alice Different Mobile");
+        diffMobileReq.setEmail(attendeeEmail);
+        diffMobileReq.setMobileNumber("9876543211");
+        diffMobileReq.setOrganization("Tech Corp");
+        AttendeeResponse diffAtt = attendeeService.createAttendee(diffMobileReq);
+        assertThat(diffAtt.getId()).isNotNull();
 
         // Stats calculation (event-scoped and global)
         AttendeeStatsResponse stats = attendeeService.getAttendeeStats(testEvent.getId());

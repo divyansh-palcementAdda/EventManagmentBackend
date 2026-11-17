@@ -263,7 +263,7 @@ public class FormBuilderService {
         }
     }
 
-    private void validateFieldValue(FormFieldDto field, String strVal) {
+    public void validateFieldValue(FormFieldDto field, String strVal) {
         switch (field.getFieldType()) {
             case EMAIL:
                 if (!EMAIL_PATTERN.matcher(strVal).matches()) {
@@ -398,7 +398,7 @@ public class FormBuilderService {
         if ("STUDENT".equalsIgnoreCase(categoryCode)) {
             list.add(FormFieldDto.builder()
                     .fieldKey("college")
-                    .label("College / University")
+                    .label("College or institution")
                     .placeholder("Enter your institution name")
                     .fieldType(FieldType.TEXT)
                     .required(true)

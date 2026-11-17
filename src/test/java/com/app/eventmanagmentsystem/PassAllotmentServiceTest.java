@@ -306,6 +306,7 @@ class PassAllotmentServiceTest {
             actReq.setRawToken(p.getPassNumber());
             actReq.setAttendeeFullName("Attendee " + i);
             actReq.setAttendeeEmail("attendee" + i + "@event.test");
+            actReq.setAttendeeMobileNumber("98765431" + String.format("%02d", i));
             passActivationService.activatePass(actReq);
         }
 
@@ -491,6 +492,7 @@ class PassAllotmentServiceTest {
             act.setRawToken(passes.get(i).getPassNumber());
             act.setAttendeeFullName("Prof " + (i == 0 ? "SpecificSearchTarget" : "Name" + i));
             act.setAttendeeEmail("prof" + i + "@college.edu");
+            act.setAttendeeMobileNumber("98765432" + String.format("%02d", i));
             passActivationService.activatePass(act);
         }
 

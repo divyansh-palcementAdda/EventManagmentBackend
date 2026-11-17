@@ -244,11 +244,11 @@ class BulkPassServiceTest {
 
     @Test
     @WithMockUser(authorities = {"PASS_VIEW"})
-    @DisplayName("Scenario E: Duplicate email in spreadsheet is flagged as invalid row")
-    void testPreviewDuplicateEmailInSpreadsheet() throws Exception {
+    @DisplayName("Scenario E: Duplicate mobile in spreadsheet is flagged as invalid row")
+    void testPreviewDuplicateMobileInSpreadsheet() throws Exception {
         List<String[]> rows = List.of(
-                new String[]{"User One", "dup@example.com", "9876543210", "Org", "Role"},
-                new String[]{"User Duplicate", "dup@example.com", "9876543211", "Org", "Role"}
+                new String[]{"User One", "user1@example.com", "9876543210", "Org", "Role"},
+                new String[]{"User Duplicate", "user2@example.com", "+91 9876543210", "Org", "Role"}
         );
         byte[] excelBytes = createTestExcel(rows);
         MockMultipartFile file = new MockMultipartFile("file", "attendees.xlsx",
@@ -260,7 +260,7 @@ class BulkPassServiceTest {
         assertThat(preview.isCanConfirm()).isFalse();
         assertThat(preview.getInvalidRowCount()).isEqualTo(1);
         assertThat(preview.getItems().get(1).getResultStatus()).isEqualTo("INVALID_DATA");
-        assertThat(preview.getItems().get(1).getConflictReason()).contains("Duplicate email");
+        assertThat(preview.getItems().get(1).getConflictReason()).contains("Duplicate mobile number");
     }
 
     @Test
@@ -316,12 +316,14 @@ class BulkPassServiceTest {
                 .passId(testPasses.get(0).getId())
                 .attendeeFullName("Alice Wonder")
                 .attendeeEmail("alice@example.com")
+                .attendeeMobileNumber("9876543210")
                 .build();
 
         BulkActivationAssignmentDto a2 = BulkActivationAssignmentDto.builder()
                 .passId(testPasses.get(1).getId())
                 .attendeeFullName("Bob Hope")
                 .attendeeEmail("bob@example.com")
+                .attendeeMobileNumber("9876543211")
                 .build();
 
         BulkActivationConfirmRequest request = BulkActivationConfirmRequest.builder()

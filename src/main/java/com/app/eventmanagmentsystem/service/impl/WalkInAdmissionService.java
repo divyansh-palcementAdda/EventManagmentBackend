@@ -16,6 +16,7 @@ import com.app.eventmanagmentsystem.payload.walkin.WalkInAdmitResponse;
 import com.app.eventmanagmentsystem.repository.*;
 import com.app.eventmanagmentsystem.security.AppUserDetails;
 import com.app.eventmanagmentsystem.service.interfaces.AuditLogService;
+import com.app.eventmanagmentsystem.util.PhoneNumberUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -105,11 +106,12 @@ public class WalkInAdmissionService {
             String email = request.getEmail() != null && !request.getEmail().isBlank()
                     ? request.getEmail().trim().toLowerCase()
                     : null;
+            String normMobile = PhoneNumberUtil.normalize(request.getMobileNumber());
 
-            if (email != null && attendeeRepository.existsByEventAndEmail(event.getId(), email)) {
-                attendee = attendeeRepository.findByEventIdAndEmailIgnoreCase(event.getId(), email)
+            if (normMobile != null && attendeeRepository.existsByEventIdAndNormalizedMobileNumber(event.getId(), normMobile)) {
+                attendee = attendeeRepository.findByEventIdAndNormalizedMobileNumber(event.getId(), normMobile)
                         .orElseThrow(() -> new InvalidRequestException(
-                                "Attendee with email already exists for this event."));
+                                "Attendee with mobile number already exists for this event."));
             } else {
                 attendee = new Attendee();
                 attendee.setEvent(event);

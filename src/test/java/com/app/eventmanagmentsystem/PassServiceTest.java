@@ -176,6 +176,7 @@ class PassServiceTest {
         actReq.setRawToken(pass.getRawToken());
         actReq.setAttendeeFullName("Jane Doe");
         actReq.setAttendeeEmail("jane.doe@example.com");
+        actReq.setAttendeeMobileNumber("9876543210");
         actReq.setAttendeeCollege("MIT");
         actReq.setAttendeeCourse("Computer Science");
         actReq.setAttendeeOrganization("Acme Inc");
@@ -220,6 +221,7 @@ class PassServiceTest {
         actReq.setRawToken(pass.getRawToken());
         actReq.setAttendeeFullName("Jane Doe");
         actReq.setAttendeeEmail("jane.doe@example.com");
+        actReq.setAttendeeMobileNumber("9876543210");
         actReq.setAttendeeCollege("MIT");
         actReq.setAttendeeCourse("Computer Science");
 
@@ -231,6 +233,7 @@ class PassServiceTest {
         actReq2.setRawToken(pass.getRawToken());
         actReq2.setAttendeeFullName("Second Person");
         actReq2.setAttendeeEmail("second@example.com");
+        actReq2.setAttendeeMobileNumber("9876543211");
 
         assertThatThrownBy(() -> passActivationService.activatePass(actReq2))
                 .isInstanceOf(PassAlreadyActivatedException.class);
@@ -259,8 +262,8 @@ class PassServiceTest {
 
     @Test
     @WithMockUser(authorities = "PASS_GENERATE")
-    @DisplayName("Pass activation: duplicate attendee email for same event is prevented")
-    void duplicateAttendeeEmailForSameEventPrevented() {
+    @DisplayName("Pass activation: duplicate attendee mobile for same event is prevented")
+    void duplicateAttendeeMobileForSameEventPrevented() {
         GeneratePassRequest genReq = new GeneratePassRequest();
         genReq.setEventId(testEvent.getId());
         genReq.setBatchSize(2);
@@ -271,6 +274,7 @@ class PassServiceTest {
         actReq1.setRawToken(passes.get(0).getRawToken());
         actReq1.setAttendeeFullName("Jane Doe");
         actReq1.setAttendeeEmail("jane.doe@example.com");
+        actReq1.setAttendeeMobileNumber("9876543210");
         actReq1.setAttendeeCollege("MIT");
         actReq1.setAttendeeCourse("Computer Science");
         passActivationService.activatePass(actReq1);
@@ -279,12 +283,46 @@ class PassServiceTest {
         actReq2.setEventId(testEvent.getId());
         actReq2.setRawToken(passes.get(1).getRawToken());
         actReq2.setAttendeeFullName("Another Jane");
-        actReq2.setAttendeeEmail("jane.doe@example.com"); // Duplicate email!
+        actReq2.setAttendeeEmail("another.jane@example.com");
+        actReq2.setAttendeeMobileNumber("+91 9876543210"); // Same mobile in different format!
         actReq2.setAttendeeCollege("MIT");
         actReq2.setAttendeeCourse("Computer Science");
 
         assertThatThrownBy(() -> passActivationService.activatePass(actReq2))
-                .isInstanceOf(DuplicateResourceException.class);
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessageContaining("mobile number is already registered for this event");
+    }
+
+    @Test
+    @WithMockUser(authorities = "PASS_GENERATE")
+    @DisplayName("Pass activation: duplicate email with different mobile numbers is allowed")
+    void duplicateEmailWithDifferentMobileNumbersAllowed() {
+        GeneratePassRequest genReq = new GeneratePassRequest();
+        genReq.setEventId(testEvent.getId());
+        genReq.setBatchSize(2);
+        List<PassResponse> passes = passGenerationService.generatePasses(genReq);
+
+        ActivatePassRequest actReq1 = new ActivatePassRequest();
+        actReq1.setEventId(testEvent.getId());
+        actReq1.setRawToken(passes.get(0).getRawToken());
+        actReq1.setAttendeeFullName("Jane Doe");
+        actReq1.setAttendeeEmail("shared.family@example.com");
+        actReq1.setAttendeeMobileNumber("9876543211");
+        actReq1.setAttendeeCollege("MIT");
+        actReq1.setAttendeeCourse("Computer Science");
+        PassResponse res1 = passActivationService.activatePass(actReq1);
+        assertThat(res1.getStatus()).isEqualTo(PassStatus.ACTIVATED);
+
+        ActivatePassRequest actReq2 = new ActivatePassRequest();
+        actReq2.setEventId(testEvent.getId());
+        actReq2.setRawToken(passes.get(1).getRawToken());
+        actReq2.setAttendeeFullName("John Doe");
+        actReq2.setAttendeeEmail("shared.family@example.com"); // Same email!
+        actReq2.setAttendeeMobileNumber("9876543212"); // Different mobile
+        actReq2.setAttendeeCollege("MIT");
+        actReq2.setAttendeeCourse("Computer Science");
+        PassResponse res2 = passActivationService.activatePass(actReq2);
+        assertThat(res2.getStatus()).isEqualTo(PassStatus.ACTIVATED);
     }
 
     @Test
@@ -302,6 +340,7 @@ class PassServiceTest {
         act1.setRawToken(pass1.getRawToken());
         act1.setAttendeeFullName("Sam Multiverse");
         act1.setAttendeeEmail("sam@multiverse.test");
+        act1.setAttendeeMobileNumber("9876543210");
         act1.setAttendeeCollege("Caltech");
         act1.setAttendeeCourse("Physics");
         PassResponse res1 = passActivationService.activatePass(act1);
@@ -329,6 +368,7 @@ class PassServiceTest {
         act2.setRawToken(pass2.getRawToken());
         act2.setAttendeeFullName("Sam Multiverse");
         act2.setAttendeeEmail("sam@multiverse.test");
+        act2.setAttendeeMobileNumber("+91 9876543210");
         act2.setAttendeeOrganization("OpenAI Research");
         act2.setAttendeeDesignation("Research Scientist");
         PassResponse res2 = passActivationService.activatePass(act2);

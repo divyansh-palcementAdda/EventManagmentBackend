@@ -338,6 +338,7 @@ class QrScanningAndVerificationTest {
                 actReq.setRawToken(pass.getPassNumber());
                 actReq.setAttendeeFullName("Dave Stone");
                 actReq.setAttendeeEmail("dave@stone.test");
+                actReq.setAttendeeMobileNumber("9876543212");
                 actReq.setAttendeeCollege("Columbia University");
                 actReq.setAttendeeCourse("Law");
                 passActivationService.activatePass(actReq);
@@ -407,6 +408,7 @@ class QrScanningAndVerificationTest {
                 validReq.setRawToken(pass.getPassNumber());
                 validReq.setAttendeeFullName("Student John");
                 validReq.setAttendeeEmail("john.student@university.edu");
+                validReq.setAttendeeMobileNumber("9876543210");
                 validReq.setAttendeeCollege("Stanford University");
                 validReq.setAttendeeCourse("B.S. Software Engineering");
                 validReq.setAttendeeYearSemester("3rd Year");
@@ -457,6 +459,7 @@ class QrScanningAndVerificationTest {
                 actReq.setRawToken(pass.getPassNumber());
                 actReq.setAttendeeFullName("Professional Jane");
                 actReq.setAttendeeEmail("jane.pro@corporate.com");
+                actReq.setAttendeeMobileNumber("9876543211");
                 actReq.setAttendeeOrganization("Tech Corp");
                 actReq.setAttendeeDesignation("Lead Architect");
 
@@ -538,6 +541,7 @@ class QrScanningAndVerificationTest {
                 actReq.setRawToken(decodedPayload);
                 actReq.setAttendeeFullName("Dual Flow Attendee");
                 actReq.setAttendeeEmail("dual.flow@attendee.local");
+                actReq.setAttendeeMobileNumber("9876543213");
                 actReq.setAttendeeCollege("Renaissance University");
                 actReq.setAttendeeCourse("B.Tech");
 

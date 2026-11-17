@@ -449,7 +449,7 @@ public class WhatsAppTimeoutAndOutboxResilienceTest {
                 req.setEventId(testEvent.getId());
                 req.setAttendeeFullName("Distinct Attendee 1");
                 req.setAttendeeEmail("distinct1." + UUID.randomUUID() + "@test.local");
-                req.setAttendeeMobileNumber("9876543210");
+                req.setAttendeeMobileNumber("9876543211");
                 req.setAttendeeCollege("Renaissance University");
                 req.setAttendeeCourse("Computer Science");
 
@@ -498,7 +498,7 @@ public class WhatsAppTimeoutAndOutboxResilienceTest {
                 req.setEventId(testEvent.getId());
                 req.setAttendeeFullName("Distinct Attendee 2");
                 req.setAttendeeEmail("distinct2." + UUID.randomUUID() + "@test.local");
-                req.setAttendeeMobileNumber("9876543210");
+                req.setAttendeeMobileNumber("9876543212");
                 req.setAttendeeCollege("Renaissance University");
                 req.setAttendeeCourse("Computer Science");
 

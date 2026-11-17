@@ -17,6 +17,14 @@ public interface AttendeeRepository extends JpaRepository<Attendee, UUID>, JpaSp
 
     Page<Attendee> findByEventId(UUID eventId, Pageable pageable);
 
+    @Query("SELECT COUNT(a) > 0 FROM Attendee a WHERE a.event.id = :eventId AND a.normalizedMobileNumber = :normalizedMobileNumber")
+    boolean existsByEventIdAndNormalizedMobileNumber(@Param("eventId") UUID eventId, @Param("normalizedMobileNumber") String normalizedMobileNumber);
+
+    Optional<Attendee> findByEventIdAndNormalizedMobileNumber(UUID eventId, String normalizedMobileNumber);
+
+    @Query("SELECT COUNT(a) > 0 FROM Attendee a WHERE a.event.id = :eventId AND a.normalizedMobileNumber = :normalizedMobileNumber AND a.id <> :excludeId")
+    boolean existsByEventIdAndNormalizedMobileNumberAndIdNot(@Param("eventId") UUID eventId, @Param("normalizedMobileNumber") String normalizedMobileNumber, @Param("excludeId") UUID excludeId);
+
     @Query("SELECT COUNT(a) > 0 FROM Attendee a WHERE a.event.id = :eventId AND LOWER(a.email) = LOWER(:email)")
     boolean existsByEventAndEmail(@Param("eventId") UUID eventId, @Param("email") String email);
 

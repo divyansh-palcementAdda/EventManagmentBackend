@@ -177,6 +177,7 @@ class CheckInServiceTest {
         actReq.setRawToken(pass.getRawToken());
         actReq.setAttendeeFullName("Alice Smith");
         actReq.setAttendeeEmail("alice@example.com");
+        actReq.setAttendeeMobileNumber("9876543001");
         actReq.setAttendeeCollege("Stanford");
         actReq.setAttendeeCourse("Engineering");
         passActivationService.activatePass(actReq);
@@ -230,6 +231,7 @@ class CheckInServiceTest {
         actReq.setRawToken(pass.getRawToken());
         actReq.setAttendeeFullName("Bob");
         actReq.setAttendeeEmail("bob@example.com");
+        actReq.setAttendeeMobileNumber("9876543002");
         actReq.setAttendeeCollege("Harvard");
         actReq.setAttendeeCourse("Business");
         passActivationService.activatePass(actReq);
@@ -257,6 +259,7 @@ class CheckInServiceTest {
         actReq.setRawToken(pass.getRawToken());
         actReq.setAttendeeFullName("Charlie");
         actReq.setAttendeeEmail("charlie@example.com");
+        actReq.setAttendeeMobileNumber("9876543003");
         actReq.setAttendeeCollege("Oxford");
         actReq.setAttendeeCourse("History");
         passActivationService.activatePass(actReq);
@@ -293,6 +296,7 @@ class CheckInServiceTest {
         actReq.setRawToken(pass.getRawToken());
         actReq.setAttendeeFullName("SuperAdmin Attendee");
         actReq.setAttendeeEmail("sa_att@example.com");
+        actReq.setAttendeeMobileNumber("9876543004");
         actReq.setAttendeeCollege("MIT");
         actReq.setAttendeeCourse("Computer Science");
         passActivationService.activatePass(actReq);
@@ -334,6 +338,7 @@ class CheckInServiceTest {
         act1.setRawToken(pass1.getRawToken());
         act1.setAttendeeFullName("Event 1 Guest");
         act1.setAttendeeEmail("guest1@example.com");
+        act1.setAttendeeMobileNumber("9876543005");
         act1.setAttendeeCollege("Harvard");
         act1.setAttendeeCourse("Economics");
         passActivationService.activatePass(act1);
@@ -356,6 +361,7 @@ class CheckInServiceTest {
         act2.setRawToken(pass2.getRawToken());
         act2.setAttendeeFullName("Event 2 Guest");
         act2.setAttendeeEmail("guest2@example.com");
+        act2.setAttendeeMobileNumber("9876543006");
         act2.setAttendeeCollege("Oxford");
         act2.setAttendeeCourse("Physics");
         passActivationService.activatePass(act2);
@@ -383,6 +389,7 @@ class CheckInServiceTest {
         actReq.setRawToken(pass.getRawToken());
         actReq.setAttendeeFullName("Revoked User");
         actReq.setAttendeeEmail("revoked@example.com");
+        actReq.setAttendeeMobileNumber("9876543007");
         actReq.setAttendeeCollege("MIT");
         actReq.setAttendeeCourse("Science");
         passActivationService.activatePass(actReq);
@@ -433,6 +440,7 @@ class CheckInServiceTest {
         actReq.setRawToken(pass.getRawToken());
         actReq.setAttendeeFullName("Multi Day Attendee");
         actReq.setAttendeeEmail("multiday@example.com");
+        actReq.setAttendeeMobileNumber("9876543008");
         actReq.setAttendeeCollege("Cambridge");
         actReq.setAttendeeCourse("Mathematics");
         passActivationService.activatePass(actReq);
