@@ -8,6 +8,7 @@ import com.app.eventmanagmentsystem.model.enums.PassStatus;
 import com.app.eventmanagmentsystem.repository.EventPassRepository;
 import com.app.eventmanagmentsystem.repository.EventRepository;
 import com.app.eventmanagmentsystem.service.impl.PassImageService;
+import com.app.eventmanagmentsystem.util.PassLookupUtil;
 import com.google.zxing.BinaryBitmap;
 import com.google.zxing.MultiFormatReader;
 import com.google.zxing.Result;
@@ -48,6 +49,9 @@ public class PassImageLayoutAndScenariosTest {
 
     @Autowired
     private EventPassRepository passRepository;
+
+    @Autowired
+    private PassLookupUtil passLookupUtil;
 
     private Event testEvent;
 
@@ -100,7 +104,9 @@ public class PassImageLayoutAndScenariosTest {
         Result result = new MultiFormatReader().decode(binaryBitmap);
 
         assertThat(result).isNotNull();
-        assertThat(result.getText()).isEqualTo(expectedPassNumber);
+        String expectedUrl = passImageService.buildActivationUrl(expectedPassNumber);
+        assertThat(result.getText()).isEqualTo(expectedUrl);
+        assertThat(passLookupUtil.extractIdentifier(result.getText())).isEqualTo(expectedPassNumber);
     }
 
     @Test

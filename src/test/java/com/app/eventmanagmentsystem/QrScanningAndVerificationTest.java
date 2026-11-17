@@ -39,7 +39,13 @@ import com.app.eventmanagmentsystem.security.AppUserDetails;
 import com.app.eventmanagmentsystem.service.impl.CheckInService;
 import com.app.eventmanagmentsystem.service.impl.PassActivationService;
 import com.app.eventmanagmentsystem.service.impl.PassGenerationService;
+import com.app.eventmanagmentsystem.service.impl.PassImageService;
 import com.app.eventmanagmentsystem.util.PassLookupUtil;
+import com.google.zxing.BinaryBitmap;
+import com.google.zxing.MultiFormatReader;
+import com.google.zxing.Result;
+import com.google.zxing.client.j2se.BufferedImageLuminanceSource;
+import com.google.zxing.common.HybridBinarizer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -49,6 +55,10 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
+
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -99,6 +109,9 @@ class QrScanningAndVerificationTest {
 
         @Autowired
         private PassLookupUtil passLookupUtil;
+
+        @Autowired
+        private PassImageService passImageService;
 
         private Event event;
         private EventDay day1;
@@ -463,5 +476,109 @@ class QrScanningAndVerificationTest {
 
                 assertThatThrownBy(() -> passActivationService.validatePass("TOTALLY-INVALID-TOKEN-999"))
                                 .isInstanceOf(InvalidQrTokenException.class);
+        }
+
+        @Test
+        @DisplayName("WhatsApp Pass QR Dual Workflow: Supports both Public Activation (Workflow A) and Authorized Check-In (Workflow B)")
+        void testWhatsAppPassQrDualWorkflow_PublicActivationAndAuthorizedCheckIn() throws Exception {
+                // 1. Generate a pass
+                authenticateAs(gatekeeperUser);
+                GeneratePassRequest genReq = new GeneratePassRequest();
+                genReq.setEventId(event.getId());
+                genReq.setBatchSize(1);
+                List<PassResponse> generatedList = passGenerationService.generatePasses(genReq);
+                assertThat(generatedList).hasSize(1);
+                PassResponse generatedPass = generatedList.get(0);
+                String passNumber = generatedPass.getPassNumber();
+
+                EventPass pass = passRepository.findById(generatedPass.getId()).orElseThrow();
+
+                // 2. Render WhatsApp Pass Image using PassImageService
+                byte[] imageBytes = passImageService.generateAndSavePassImage(pass);
+                assertThat(imageBytes).isNotNull().isNotEmpty();
+
+                // 3. Extract and decode the embedded QR code from the generated image
+                BufferedImage img = ImageIO.read(new ByteArrayInputStream(imageBytes));
+                int qrCropX = (int) (img.getWidth() * 0.70);
+                int qrCropY = (int) (img.getHeight() * 0.55);
+                int qrCropW = img.getWidth() - qrCropX;
+                int qrCropH = (int) (img.getHeight() * 0.35);
+
+                BufferedImage qrSub = img.getSubimage(qrCropX, qrCropY, qrCropW, qrCropH);
+                BinaryBitmap binaryBitmap = new BinaryBitmap(new HybridBinarizer(new BufferedImageLuminanceSource(qrSub)));
+                Result decodedResult = new MultiFormatReader().decode(binaryBitmap);
+
+                assertThat(decodedResult).isNotNull();
+                String decodedPayload = decodedResult.getText();
+
+                // Verify QR code encodes full canonical public activation URL
+                String expectedUrl = passImageService.buildActivationUrl(passNumber);
+                assertThat(decodedPayload).isEqualTo(expectedUrl);
+                assertThat(decodedPayload).startsWith("https://event.areyoureporting.com/activate/");
+                assertThat(decodedPayload).endsWith(passNumber);
+
+                // Verify extraction utility extracts clean pass number from the URL
+                String extractedIdentifier = passLookupUtil.extractIdentifier(decodedPayload);
+                assertThat(extractedIdentifier).isEqualTo(passNumber);
+
+                // =========================================================================
+                // WORKFLOW A: Unauthenticated public attendee scans QR with camera
+                // =========================================================================
+                SecurityContextHolder.clearContext(); // Unauthenticated visitor
+
+                // A.1 Visitor hits public validate endpoint with decoded QR payload
+                ValidatePassResponse validateResp = passActivationService.validatePass(decodedPayload);
+                assertThat(validateResp.isValid()).isTrue();
+                assertThat(validateResp.isEligibleForActivation()).isTrue();
+                assertThat(validateResp.getPassNumber()).isEqualTo(passNumber);
+
+                // A.2 Visitor submits public activation form
+                ActivatePassRequest actReq = new ActivatePassRequest();
+                actReq.setEventId(event.getId());
+                actReq.setRawToken(decodedPayload);
+                actReq.setAttendeeFullName("Dual Flow Attendee");
+                actReq.setAttendeeEmail("dual.flow@attendee.local");
+                actReq.setAttendeeCollege("Renaissance University");
+                actReq.setAttendeeCourse("B.Tech");
+
+                PassResponse activatedPass = passActivationService.activatePass(actReq);
+                assertThat(activatedPass.getStatus()).isEqualTo(PassStatus.ACTIVATED);
+                assertThat(activatedPass.getAttendeeName()).isEqualTo("Dual Flow Attendee");
+
+                // =========================================================================
+                // WORKFLOW B: Authenticated & authorized gatekeeper scans pass at event entry
+                // =========================================================================
+                authenticateAs(gatekeeperUser);
+
+                // B.1 Staff scanner pre-verifies pass entry using the exact decoded QR payload
+                CheckInRequest verifyReq = new CheckInRequest();
+                verifyReq.setEventId(event.getId());
+                verifyReq.setRawToken(decodedPayload);
+                verifyReq.setEventDayId(day2.getId());
+
+                CheckInVerificationResponse verifyResp = checkInService.verifyPass(verifyReq);
+                assertThat(verifyResp.isValid()).isTrue();
+                assertThat(verifyResp.isEligibleForCheckIn()).isTrue();
+                assertThat(verifyResp.getAttendeeName()).isEqualTo("Dual Flow Attendee");
+                assertThat(verifyResp.getPassNumber()).isEqualTo(passNumber);
+
+                // B.2 Staff performs check-in scan using the decoded QR payload
+                CheckInResponse checkInResp = checkInService.performCheckIn(verifyReq);
+                assertThat(checkInResp.getPassNumber()).isEqualTo(passNumber);
+                assertThat(checkInResp.getAttendeeName()).isEqualTo("Dual Flow Attendee");
+                assertThat(checkInResp.getDayNumber()).isEqualTo(2);
+
+                // B.3 Duplicate check-in on same day is rejected
+                assertThatThrownBy(() -> checkInService.performCheckIn(verifyReq))
+                                .isInstanceOf(PassAlreadyCheckedInException.class);
+
+                // =========================================================================
+                // SECURITY VERIFICATION: Unassigned staff cannot check in with this QR payload
+                // =========================================================================
+                authenticateAs(unassignedUser);
+                assertThatThrownBy(() -> checkInService.verifyPass(verifyReq))
+                                .isInstanceOf(EventAccessDeniedException.class);
+                assertThatThrownBy(() -> checkInService.performCheckIn(verifyReq))
+                                .isInstanceOf(EventAccessDeniedException.class);
         }
 }

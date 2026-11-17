@@ -30,6 +30,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -52,6 +54,30 @@ public class PassImageService {
 
     @Value("${app.upload.dir:uploads}")
     private String baseUploadDir;
+
+    @Value("${app.frontend.url:${app.botsense.media-public-base-url:https://event.areyoureporting.com}}")
+    private String frontendBaseUrl;
+
+    public void setFrontendBaseUrl(String frontendBaseUrl) {
+        this.frontendBaseUrl = frontendBaseUrl;
+    }
+
+    public String getFrontendBaseUrl() {
+        return this.frontendBaseUrl;
+    }
+
+    public String buildActivationUrl(String passNumberOrId) {
+        String base = (frontendBaseUrl != null && !frontendBaseUrl.isBlank())
+                ? frontendBaseUrl.trim()
+                : "https://event.areyoureporting.com";
+        while (base.endsWith("/")) {
+            base = base.substring(0, base.length() - 1);
+        }
+        String identifier = (passNumberOrId != null && !passNumberOrId.isBlank())
+                ? passNumberOrId.trim()
+                : "EVENT-PASS";
+        return base + "/activate/" + URLEncoder.encode(identifier, StandardCharsets.UTF_8);
+    }
 
     private Path getPassUploadDir() {
         Path path = Paths.get(baseUploadDir, "passes");
@@ -374,8 +400,9 @@ public class PassImageService {
                 String text2 = "NO QR";
                 g2d.drawString(text2, qrBoxX + (qrBoxWidth - fm.stringWidth(text2)) / 2, qrBoxY + (qrBoxHeight / 2) + 30);
             } else {
-                // Generate ZXing QR
-                String qrData = snapshot.getPassNumber() != null ? snapshot.getPassNumber() : snapshot.getPassId().toString();
+                // Generate ZXing QR with full canonical public activation URL
+                String identifier = snapshot.getPassNumber() != null ? snapshot.getPassNumber() : snapshot.getPassId().toString();
+                String qrData = buildActivationUrl(identifier);
                 BufferedImage qrImage = generateQrCodeImage(qrData, qrBoxWidth, qrBoxHeight);
                 if (qrImage != null) {
                     g2d.drawImage(qrImage, qrBoxX, qrBoxY, qrBoxWidth, qrBoxHeight, null);
@@ -482,8 +509,9 @@ public class PassImageService {
                 g.drawString("Attendee: " + snapshot.getAttendeeName(), 50, 380);
             }
 
-            // QR Code
-            String qrData = snapshot.getPassNumber() != null ? snapshot.getPassNumber() : snapshot.getPassId().toString();
+            // QR Code with full canonical public activation URL
+            String identifier = snapshot.getPassNumber() != null ? snapshot.getPassNumber() : snapshot.getPassId().toString();
+            String qrData = buildActivationUrl(identifier);
             BufferedImage qr = generateQrCodeImage(qrData, 240, 240);
             if (qr != null) {
                 g.drawImage(qr, w - 300, 200, 240, 240, null);
