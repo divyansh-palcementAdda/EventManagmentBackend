@@ -27,7 +27,8 @@ import java.util.UUID;
         @Index(name = "idx_ep_token_hash", columnList = "token_hash", unique = true),
         @Index(name = "idx_ep_status", columnList = "status"),
         @Index(name = "idx_ep_attendee", columnList = "attendee_id"),
-        @Index(name = "idx_ep_event_sequence", columnList = "event_id, sequence_number")
+        @Index(name = "idx_ep_event_sequence", columnList = "event_id, sequence_number"),
+        @Index(name = "idx_ep_allotment", columnList = "allotment_id")
 })
 @Getter
 @Setter
@@ -68,6 +69,10 @@ public class EventPass extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "event_category_id")
     private EventPassCategory eventCategory;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "allotment_id")
+    private PassAllotment allotment;
 
     public void setCategory(com.app.eventmanagmentsystem.model.enums.PassCategory catEnum) {
         this.category = catEnum != null ? catEnum.name() : "STUDENT";

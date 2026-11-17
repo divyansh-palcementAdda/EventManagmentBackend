@@ -85,5 +85,48 @@ public interface EventPassRepository extends JpaRepository<EventPass, UUID>, Jpa
 
     @Query("SELECT COUNT(p) FROM EventPass p WHERE p.event.id = :eventId AND p.attendee IS NOT NULL")
     long countWithAttendeeByEventId(@Param("eventId") UUID eventId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM EventPass p WHERE p.event.id = :eventId AND p.category = :categoryCode AND p.sequenceNumber >= :fromSeq AND p.sequenceNumber <= :toSeq AND p.allotment IS NULL ORDER BY p.sequenceNumber ASC")
+    List<EventPass> findUnallottedPassesForUpdate(
+            @Param("eventId") UUID eventId,
+            @Param("categoryCode") String categoryCode,
+            @Param("fromSeq") Long fromSeq,
+            @Param("toSeq") Long toSeq
+    );
+
+    @Query("SELECT COUNT(p) FROM EventPass p WHERE p.event.id = :eventId AND p.category = :categoryCode AND p.sequenceNumber >= :fromSeq AND p.sequenceNumber <= :toSeq")
+    long countByEventIdAndCategoryAndSequenceNumberBetween(
+            @Param("eventId") UUID eventId,
+            @Param("categoryCode") String categoryCode,
+            @Param("fromSeq") Long fromSeq,
+            @Param("toSeq") Long toSeq
+    );
+
+    @Query("SELECT COUNT(p) FROM EventPass p WHERE p.event.id = :eventId AND p.category = :categoryCode AND p.sequenceNumber >= :fromSeq AND p.sequenceNumber <= :toSeq AND p.allotment IS NOT NULL")
+    long countAllottedByEventIdAndCategoryAndSequenceNumberBetween(
+            @Param("eventId") UUID eventId,
+            @Param("categoryCode") String categoryCode,
+            @Param("fromSeq") Long fromSeq,
+            @Param("toSeq") Long toSeq
+    );
+
+    @Query("SELECT p FROM EventPass p WHERE p.event.id = :eventId AND p.category = :categoryCode ORDER BY p.sequenceNumber ASC")
+    List<EventPass> findByEventIdAndCategoryOrderBySequenceNumberAsc(
+            @Param("eventId") UUID eventId,
+            @Param("categoryCode") String categoryCode
+    );
+
+    List<EventPass> findByAllotmentIdOrderBySequenceNumberAsc(UUID allotmentId);
+
+    @Query("SELECT p FROM EventPass p LEFT JOIN FETCH p.attendee WHERE p.allotment.id IN :allotmentIds ORDER BY p.sequenceNumber ASC")
+    List<EventPass> findByAllotmentIdInOrderBySequenceNumberAsc(@Param("allotmentIds") java.util.Collection<UUID> allotmentIds);
+
+    @Query("SELECT COUNT(p) FROM EventPass p WHERE p.allotment.id = :allotmentId")
+    long countByAllotmentId(@Param("allotmentId") UUID allotmentId);
+
+    @Query("SELECT COUNT(p) FROM EventPass p WHERE p.allotment.id = :allotmentId AND p.status = 'ACTIVATED'")
+    long countActivatedByAllotmentId(@Param("allotmentId") UUID allotmentId);
 }
+
 

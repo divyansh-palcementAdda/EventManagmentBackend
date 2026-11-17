@@ -94,6 +94,8 @@ public class DataSeeder implements ApplicationRunner {
         new String[]{"PASS_GENERATE",     "Generate passes",             "PASS",       "GENERATE"},
         new String[]{"PASS_REVOKE",       "Revoke passes",               "PASS",       "REVOKE"},
         new String[]{"PASS_ACTIVATE",     "Activate passes",             "PASS",       "ACTIVATE"},
+        new String[]{"PASS_ALLOT_VIEW",   "View pass allotments",        "PASS_ALLOT", "VIEW"},
+        new String[]{"PASS_ALLOT_MANAGE", "Manage pass allotments",      "PASS_ALLOT", "MANAGE"},
         new String[]{"ATTENDEE_VIEW",     "View attendees",              "ATTENDEE",   "VIEW"},
         new String[]{"ATTENDEE_CREATE",   "Create attendees",            "ATTENDEE",   "CREATE"},
         new String[]{"ATTENDEE_UPDATE",   "Update attendee details",     "ATTENDEE",   "UPDATE"},
@@ -133,6 +135,7 @@ public class DataSeeder implements ApplicationRunner {
             "EVENT_VIEW","EVENT_CREATE","EVENT_UPDATE","EVENT_CANCEL",
             "GATEKEEPER_ASSIGN","GATEKEEPER_REMOVE",
             "PASS_VIEW","PASS_GENERATE","PASS_REVOKE","PASS_ACTIVATE",
+            "PASS_ALLOT_VIEW","PASS_ALLOT_MANAGE",
             "ATTENDEE_VIEW","ATTENDEE_CREATE","ATTENDEE_UPDATE","ATTENDEE_DELETE","ATTENDEE_EXPORT",
             "CHECKIN_VIEW","REPORT_VIEW","NOTIFICATION_VIEW",
             "PASS_CATEGORY_VIEW","EVENT_CATEGORY_VIEW","EVENT_CATEGORY_MANAGE",
@@ -145,7 +148,7 @@ public class DataSeeder implements ApplicationRunner {
             "PASS_VIEW","ATTENDEE_VIEW","WALKIN_VIEW","WALKIN_CHECKIN"
         ),
         "VIEWER", Set.of(
-            "EVENT_VIEW","PASS_VIEW","ATTENDEE_VIEW",
+            "EVENT_VIEW","PASS_VIEW","ATTENDEE_VIEW","PASS_ALLOT_VIEW",
             "CHECKIN_VIEW","REPORT_VIEW","PASS_CATEGORY_VIEW","EVENT_CATEGORY_VIEW","WALKIN_VIEW"
         )
     );
