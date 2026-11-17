@@ -130,6 +130,12 @@ public class PassLookupUtil {
             return byPassNumber;
         }
 
+        // 1b. By Unique Code
+        Optional<EventPass> byUniqueCode = passRepository.findByUniqueCode(identifier);
+        if (byUniqueCode.isPresent()) {
+            return byUniqueCode;
+        }
+
         // 2. By Hashed Token (if rawToken was passed)
         String tokenHash = qrTokenUtil.hashToken(identifier);
         Optional<EventPass> byTokenHash = passRepository.findByTokenHash(tokenHash);
@@ -167,6 +173,12 @@ public class PassLookupUtil {
         Optional<EventPass> byPassNumber = passRepository.findByPassNumberForUpdate(identifier);
         if (byPassNumber.isPresent()) {
             return byPassNumber;
+        }
+
+        // 1b. By Unique Code
+        Optional<EventPass> byUniqueCode = passRepository.findByUniqueCodeForUpdate(identifier);
+        if (byUniqueCode.isPresent()) {
+            return byUniqueCode;
         }
 
         // 2. By Hashed Token

@@ -16,6 +16,7 @@ import com.app.eventmanagmentsystem.payload.walkin.WalkInAdmitResponse;
 import com.app.eventmanagmentsystem.repository.*;
 import com.app.eventmanagmentsystem.security.AppUserDetails;
 import com.app.eventmanagmentsystem.service.interfaces.AuditLogService;
+import com.app.eventmanagmentsystem.util.PassCodeGenerator;
 import com.app.eventmanagmentsystem.util.PhoneNumberUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +45,7 @@ public class WalkInAdmissionService {
     private final CheckInRepository checkInRepository;
     private final EventGatekeeperRepository gatekeeperRepository;
     private final FormBuilderService formBuilderService;
+    private final PassCodeGenerator passCodeGenerator;
     private final AuditLogService auditLogService;
 
     @PreAuthorize("hasAuthority('WALKIN_CHECKIN') or hasAuthority('CHECKIN_SCAN') or hasAuthority('SUPER_ADMIN')")
@@ -134,11 +136,16 @@ public class WalkInAdmissionService {
         // 7. Atomically allocate pass number and generate non-QR pass
         eventRepository.incrementPassSequenceCounter(event.getId());
         long sequence = eventRepository.getPassSequenceCounter(event.getId());
-        String passNumber = String.format("%s-%s-%04d", event.getEventCode(), event.getPassSeriesCode(), sequence);
+
+        String uniqueCode = passCodeGenerator.generateUniqueCode(
+                code -> passRepository.existsByUniqueCode(code)
+        );
+        String passNumber = String.format("%s-%s-%04d", event.getEventCode(), uniqueCode, sequence);
 
         EventPass pass = new EventPass();
         pass.setEvent(event);
         pass.setPassNumber(passNumber);
+        pass.setUniqueCode(uniqueCode);
         pass.setSequenceNumber(sequence);
         pass.setCategory(epc.getPassCategory() != null ? epc.getPassCategory().getCode() : "OTHER");
         pass.setPassCategory(epc.getPassCategory());

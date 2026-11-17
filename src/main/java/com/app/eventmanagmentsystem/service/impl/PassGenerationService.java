@@ -18,6 +18,7 @@ import com.app.eventmanagmentsystem.payload.pass.PassResponse;
 import com.app.eventmanagmentsystem.repository.*;
 import com.app.eventmanagmentsystem.repository.specification.PassSpecification;
 import com.app.eventmanagmentsystem.service.interfaces.AuditLogService;
+import com.app.eventmanagmentsystem.util.PassCodeGenerator;
 import com.app.eventmanagmentsystem.util.QrTokenUtil;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
@@ -58,6 +59,7 @@ public class PassGenerationService {
     private final PassCategoryRepository passCategoryRepository;
     private final EventPassCategoryRepository eventPassCategoryRepository;
     private final QrTokenUtil qrTokenUtil;
+    private final PassCodeGenerator passCodeGenerator;
     private final AuditLogService auditLogService;
     private final EntityManager entityManager;
 
@@ -118,10 +120,11 @@ public class PassGenerationService {
             }
         }
 
+        Set<String> batchCodes = new HashSet<>(request.getBatchSize());
         List<PassResponse> results = new ArrayList<>(request.getBatchSize());
         for (int i = 0; i < request.getBatchSize(); i++) {
             PassResponse passResponse = generateSinglePass(event, request.getIdempotencyKey(), i, permittedDays,
-                    categoryCode != null ? categoryCode : "STUDENT", passCat, eventPassCat);
+                    categoryCode != null ? categoryCode : "STUDENT", passCat, eventPassCat, batchCodes);
             results.add(passResponse);
         }
 
@@ -151,13 +154,23 @@ public class PassGenerationService {
 
     private PassResponse generateSinglePass(Event event, String idempotencyKey, int batchIndex,
                                              Set<EventDay> permittedDays, String categoryCode,
-                                             com.app.eventmanagmentsystem.model.PassCategory passCategory, EventPassCategory eventCategory) {
+                                             com.app.eventmanagmentsystem.model.PassCategory passCategory,
+                                             EventPassCategory eventCategory,
+                                             Set<String> batchCodes) {
         // Increment sequence counter atomically within the locked transaction
         eventRepository.incrementPassSequenceCounter(event.getId());
         // Re-read the counter after increment
         long sequence = eventRepository.getPassSequenceCounter(event.getId());
 
-        String passNumber = formatPassNumber(event.getEventCode(), event.getPassSeriesCode(), sequence);
+        // Generate globally unique alphanumeric code for this individual pass
+        String uniqueCode = passCodeGenerator.generateUniqueCode(
+                code -> (batchCodes != null && batchCodes.contains(code)) || passRepository.existsByUniqueCode(code)
+        );
+        if (batchCodes != null) {
+            batchCodes.add(uniqueCode);
+        }
+
+        String passNumber = formatPassNumber(event.getEventCode(), uniqueCode, sequence);
 
         boolean qrRequired = true;
         if ("VIP".equalsIgnoreCase(categoryCode)
@@ -179,6 +192,7 @@ public class PassGenerationService {
         EventPass pass = new EventPass();
         pass.setEvent(event);
         pass.setPassNumber(passNumber);
+        pass.setUniqueCode(uniqueCode);
         pass.setSequenceNumber(sequence);
         pass.setCategory(categoryCode != null ? categoryCode : "STUDENT");
         pass.setPassCategory(passCategory);
@@ -333,6 +347,7 @@ public class PassGenerationService {
         return PassResponse.builder()
                 .id(pass.getId())
                 .passNumber(pass.getPassNumber())
+                .uniqueCode(pass.getUniqueCode())
                 .sequenceNumber(pass.getSequenceNumber())
                 .category(pass.getCategory())
                 .categoryName(catName)
@@ -375,6 +390,7 @@ public class PassGenerationService {
         return PassResponse.builder()
                 .id(pass.getId())
                 .passNumber(pass.getPassNumber())
+                .uniqueCode(pass.getUniqueCode())
                 .sequenceNumber(pass.getSequenceNumber())
                 .category(pass.getCategory())
                 .categoryName(catName)
@@ -419,6 +435,7 @@ public class PassGenerationService {
         return PassResponse.builder()
                 .id(pass.getId())
                 .passNumber(pass.getPassNumber())
+                .uniqueCode(pass.getUniqueCode())
                 .sequenceNumber(pass.getSequenceNumber())
                 .category(pass.getCategory())
                 .categoryName(catName)

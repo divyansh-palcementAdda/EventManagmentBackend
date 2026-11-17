@@ -24,6 +24,7 @@ import java.util.UUID;
 @Table(name = "event_passes", indexes = {
         @Index(name = "idx_ep_event", columnList = "event_id"),
         @Index(name = "idx_ep_pass_number", columnList = "pass_number", unique = true),
+        @Index(name = "idx_ep_unique_code", columnList = "unique_code", unique = true),
         @Index(name = "idx_ep_token_hash", columnList = "token_hash", unique = true),
         @Index(name = "idx_ep_status", columnList = "status"),
         @Index(name = "idx_ep_attendee", columnList = "attendee_id"),
@@ -40,11 +41,17 @@ public class EventPass extends BaseEntity {
     private Event event;
 
     /**
-     * Human-readable identifier: {EVENT_CODE}-{SERIES_CODE}-{SEQUENCE}.
+     * Human-readable identifier: {EVENT_CODE}-{UNIQUE_CODE}-{SEQUENCE}.
      * Unique globally (enforced by DB constraint).
      */
     @Column(name = "pass_number", nullable = false, unique = true, length = 40)
     private String passNumber;
+
+    /**
+     * Globally unique middle alphanumeric code independently generated per pass.
+     */
+    @Column(name = "unique_code", length = 16, unique = true)
+    private String uniqueCode;
 
     /**
      * Explicit numeric sequence number for reliable range selection and ordering.

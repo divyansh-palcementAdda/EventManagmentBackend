@@ -47,6 +47,14 @@ public interface EventPassRepository extends JpaRepository<EventPass, UUID>, Jpa
 
     boolean existsByPassNumber(String passNumber);
 
+    boolean existsByUniqueCode(String uniqueCode);
+
+    Optional<EventPass> findByUniqueCode(String uniqueCode);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM EventPass p WHERE p.uniqueCode = :uniqueCode")
+    Optional<EventPass> findByUniqueCodeForUpdate(@Param("uniqueCode") String uniqueCode);
+
     boolean existsByTokenHash(String tokenHash);
 
     Optional<EventPass> findByIdempotencyKey(String idempotencyKey);

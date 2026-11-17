@@ -84,7 +84,8 @@ class PassServiceTest {
         assertThat(passes).hasSize(1);
 
         PassResponse pass = passes.get(0);
-        assertThat(pass.getPassNumber()).isEqualTo("TS26-F5EE57F3-0001");
+        assertThat(pass.getPassNumber()).matches("^TS26-[2-9A-HJ-NP-Z]{8}-0001$");
+        assertThat(pass.getUniqueCode()).isNotNull().hasSize(8);
         assertThat(pass.getStatus()).isEqualTo(PassStatus.NOT_ACTIVATED);
         assertThat(pass.getRawToken()).isNotNull(); // Raw token given at generation time
         assertThat(pass.getRawToken()).hasSize(64);
@@ -100,9 +101,17 @@ class PassServiceTest {
 
         List<PassResponse> passes = passGenerationService.generatePasses(req);
         assertThat(passes).hasSize(3);
-        assertThat(passes.get(0).getPassNumber()).isEqualTo("TS26-F5EE57F3-0001");
-        assertThat(passes.get(1).getPassNumber()).isEqualTo("TS26-F5EE57F3-0002");
-        assertThat(passes.get(2).getPassNumber()).isEqualTo("TS26-F5EE57F3-0003");
+        assertThat(passes.get(0).getPassNumber()).matches("^TS26-[2-9A-HJ-NP-Z]{8}-0001$");
+        assertThat(passes.get(1).getPassNumber()).matches("^TS26-[2-9A-HJ-NP-Z]{8}-0002$");
+        assertThat(passes.get(2).getPassNumber()).matches("^TS26-[2-9A-HJ-NP-Z]{8}-0003$");
+
+        // Verify each pass in the batch receives an independent globally unique middle code
+        String code1 = passes.get(0).getPassNumber().split("-")[1];
+        String code2 = passes.get(1).getPassNumber().split("-")[1];
+        String code3 = passes.get(2).getPassNumber().split("-")[1];
+        assertThat(code1).isNotEqualTo(code2);
+        assertThat(code2).isNotEqualTo(code3);
+        assertThat(code1).isNotEqualTo(code3);
     }
 
     @Test

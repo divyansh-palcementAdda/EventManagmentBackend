@@ -22,6 +22,7 @@ public class PassResponse {
 
     private UUID id;
     private String passNumber;
+    private String uniqueCode;
     private Long sequenceNumber;
     private PassStatus status;
     private UUID eventId;
