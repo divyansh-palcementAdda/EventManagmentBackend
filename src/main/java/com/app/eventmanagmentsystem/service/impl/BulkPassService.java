@@ -58,10 +58,14 @@ import com.app.eventmanagmentsystem.payload.pass.PassStatsResponse;
 import com.app.eventmanagmentsystem.repository.AttendeeRepository;
 import com.app.eventmanagmentsystem.repository.CheckInRepository;
 import com.app.eventmanagmentsystem.repository.EmailOutboxRepository;
+import com.app.eventmanagmentsystem.repository.EventDayRepository;
 import com.app.eventmanagmentsystem.repository.EventPassRepository;
 import com.app.eventmanagmentsystem.repository.EventRepository;
+import com.app.eventmanagmentsystem.repository.specification.PassSpecification;
 import com.app.eventmanagmentsystem.service.interfaces.AuditLogService;
 import com.app.eventmanagmentsystem.util.PhoneNumberUtil;
+
+import org.springframework.data.jpa.domain.Specification;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -78,19 +82,105 @@ public class BulkPassService {
     private final AttendeeRepository attendeeRepository;
     private final CheckInRepository checkInRepository;
     private final EmailOutboxRepository emailOutboxRepository;
+    private final EventDayRepository eventDayRepository;
     private final AuditLogService auditLogService;
 
     @PreAuthorize("hasAuthority('PASS_VIEW')")
     @Transactional(readOnly = true)
     public PassStatsResponse getPassStats(UUID eventId) {
+        return getPassStats(eventId, null, null, null, null, null, null, null);
+    }
+
+    @PreAuthorize("hasAuthority('PASS_VIEW')")
+    @Transactional(readOnly = true)
+    public PassStatsResponse getPassStats(
+            UUID eventId,
+            String search,
+            PassStatus status,
+            String categoryCode,
+            String checkInStatus,
+            UUID eventDayId,
+            Long fromSequence,
+            Long toSequence) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event", eventId.toString()));
 
-        long total = passRepository.countByEventId(eventId);
-        long activated = passRepository.countByEventIdAndStatus(eventId, PassStatus.ACTIVATED);
-        long available = passRepository.countByEventIdAndStatus(eventId, PassStatus.NOT_ACTIVATED);
-        long revoked = passRepository.countByEventIdAndStatus(eventId, PassStatus.REVOKED);
-        long checkedIn = checkInRepository.countByEventId(eventId);
+        boolean hasFilter = (search != null && !search.trim().isEmpty())
+                || status != null
+                || (categoryCode != null && !categoryCode.trim().isEmpty() && !"ALL".equalsIgnoreCase(categoryCode.trim()))
+                || (checkInStatus != null && !checkInStatus.isBlank() && !"ALL".equalsIgnoreCase(checkInStatus))
+                || eventDayId != null
+                || fromSequence != null
+                || toSequence != null;
+
+        long total;
+        long activated;
+        long available;
+        long revoked;
+        long checkedIn;
+
+        if (!hasFilter) {
+            total = passRepository.countByEventId(eventId);
+            activated = passRepository.countByEventIdAndStatus(eventId, PassStatus.ACTIVATED);
+            available = passRepository.countByEventIdAndStatus(eventId, PassStatus.NOT_ACTIVATED);
+            revoked = passRepository.countByEventIdAndStatus(eventId, PassStatus.REVOKED);
+            checkedIn = checkInRepository.countByEventId(eventId);
+        } else {
+            EventDay eventDay = null;
+            if (eventDayId != null) {
+                eventDay = eventDayRepository.findById(eventDayId).orElse(null);
+            }
+
+            Set<UUID> checkedInPassIds = null;
+            if (checkInStatus != null && !checkInStatus.isBlank() && !"ALL".equalsIgnoreCase(checkInStatus)) {
+                checkedInPassIds = checkInRepository.findCheckedInPassIdsByEventId(eventId);
+            }
+
+            Specification<EventPass> baseSpec = PassSpecification.filterPasses(
+                    eventId, search, status, categoryCode, fromSequence, toSequence, eventDay, checkInStatus, checkedInPassIds);
+            total = passRepository.count(baseSpec);
+
+            if (status != null) {
+                if (status == PassStatus.ACTIVATED) {
+                    activated = total;
+                    available = 0;
+                    revoked = 0;
+                } else if (status == PassStatus.NOT_ACTIVATED) {
+                    available = total;
+                    activated = 0;
+                    revoked = 0;
+                } else if (status == PassStatus.REVOKED) {
+                    revoked = total;
+                    available = 0;
+                    activated = 0;
+                } else {
+                    activated = 0;
+                    available = 0;
+                    revoked = 0;
+                }
+            } else {
+                Specification<EventPass> availSpec = PassSpecification.filterPasses(
+                        eventId, search, PassStatus.NOT_ACTIVATED, categoryCode, fromSequence, toSequence, eventDay, checkInStatus, checkedInPassIds);
+                available = passRepository.count(availSpec);
+
+                Specification<EventPass> actSpec = PassSpecification.filterPasses(
+                        eventId, search, PassStatus.ACTIVATED, categoryCode, fromSequence, toSequence, eventDay, checkInStatus, checkedInPassIds);
+                activated = passRepository.count(actSpec);
+
+                Specification<EventPass> revSpec = PassSpecification.filterPasses(
+                        eventId, search, PassStatus.REVOKED, categoryCode, fromSequence, toSequence, eventDay, checkInStatus, checkedInPassIds);
+                revoked = passRepository.count(revSpec);
+            }
+
+            if ("NOT_CHECKED_IN".equalsIgnoreCase(checkInStatus)) {
+                checkedIn = 0;
+            } else {
+                Set<UUID> allCheckedInIds = checkedInPassIds != null ? checkedInPassIds : checkInRepository.findCheckedInPassIdsByEventId(eventId);
+                Specification<EventPass> chkSpec = PassSpecification.filterPasses(
+                        eventId, search, status, categoryCode, fromSequence, toSequence, eventDay, "CHECKED_IN", allCheckedInIds);
+                checkedIn = passRepository.count(chkSpec);
+            }
+        }
 
         List<Object[]> catGroups = passRepository.countByEventIdGroupByCategoryAndStatus(eventId);
         Map<String, PassStatsResponse.CategoryStats> categoryStats = new HashMap<>();

@@ -192,11 +192,19 @@ public class PassController {
                 return ResponseEntity.ok(ApiResponse.success("Pass validity updated successfully", response));
         }
 
-        @Operation(summary = "Get live pass statistics for an event", description = "Returns total, activated, available, revoked, and checked-in counts. Requires PASS_VIEW permission.")
+        @Operation(summary = "Get live pass statistics for an event", description = "Returns total, activated, available, revoked, and checked-in counts with optional filters. Requires PASS_VIEW permission.")
         @GetMapping("/event/{eventId}/stats")
         public ResponseEntity<ApiResponse<PassStatsResponse>> getPassStats(
-                        @Parameter(description = "Event UUID") @PathVariable UUID eventId) {
-                return ResponseEntity.ok(ApiResponse.success(bulkPassService.getPassStats(eventId)));
+                        @Parameter(description = "Event UUID") @PathVariable UUID eventId,
+                        @Parameter(description = "Search query by pass #, sequence, attendee name or email") @RequestParam(required = false) String search,
+                        @Parameter(description = "Pass status filter") @RequestParam(required = false) PassStatus status,
+                        @Parameter(description = "Pass category filter: STUDENT, OTHER, VIP, etc.") @RequestParam(required = false) String category,
+                        @Parameter(description = "Check-in status: ALL, CHECKED_IN, NOT_CHECKED_IN") @RequestParam(required = false) String checkInStatus,
+                        @Parameter(description = "Permitted event day filter") @RequestParam(required = false) UUID eventDayId,
+                        @Parameter(description = "From sequence number") @RequestParam(required = false) Long fromSequence,
+                        @Parameter(description = "To sequence number") @RequestParam(required = false) Long toSequence) {
+                return ResponseEntity.ok(ApiResponse.success(
+                                bulkPassService.getPassStats(eventId, search, status, category, checkInStatus, eventDayId, fromSequence, toSequence)));
         }
 
         @Operation(summary = "Export passes for bulk QR printing", description = "Exports passes matching filter criteria with full QR encoding payloads. Requires PASS_VIEW permission.")
