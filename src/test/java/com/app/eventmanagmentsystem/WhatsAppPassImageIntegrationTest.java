@@ -1,10 +1,12 @@
 package com.app.eventmanagmentsystem;
 
+import com.app.eventmanagmentsystem.model.Attendee;
 import com.app.eventmanagmentsystem.model.Event;
 import com.app.eventmanagmentsystem.model.EventPass;
 import com.app.eventmanagmentsystem.model.Role;
 import com.app.eventmanagmentsystem.model.User;
 import com.app.eventmanagmentsystem.model.enums.EventStatus;
+import com.app.eventmanagmentsystem.repository.AttendeeRepository;
 import com.app.eventmanagmentsystem.repository.RoleRepository;
 import com.app.eventmanagmentsystem.repository.UserRepository;
 import com.app.eventmanagmentsystem.security.AppUserDetails;
@@ -79,6 +81,9 @@ public class WhatsAppPassImageIntegrationTest {
     @Autowired
     private RoleRepository roleRepository;
 
+    @Autowired
+    private AttendeeRepository attendeeRepository;
+
     private Event testEvent;
 
     private void authenticateSuperAdmin() {
@@ -130,10 +135,10 @@ public class WhatsAppPassImageIntegrationTest {
         assertThat(img).isNotNull();
         double scaleX = (double) img.getWidth() / 1080.0;
         double scaleY = (double) img.getHeight() / 1350.0;
-        int boxX = (int) Math.round(629 * scaleX);
-        int boxY = (int) Math.round(653 * scaleY);
-        int boxW = (int) Math.round(274 * scaleX);
-        int boxH = (int) Math.round(274 * scaleY);
+        int boxX = (int) Math.round(625 * scaleX);
+        int boxY = (int) Math.round(598 * scaleY);
+        int boxW = (int) Math.round(273 * scaleX);
+        int boxH = (int) Math.round(272 * scaleY);
 
         BufferedImage qrSub = img.getSubimage(boxX, boxY, boxW, boxH);
         Map<DecodeHintType, Object> hints = new EnumMap<>(DecodeHintType.class);
@@ -167,7 +172,7 @@ public class WhatsAppPassImageIntegrationTest {
         assertThat(waImage[3]).isEqualTo((byte) 'G');
 
         BufferedImage template;
-        try (InputStream in = getClass().getResourceAsStream("/passes/rcf wa.png")) {
+        try (InputStream in = getClass().getResourceAsStream("/passes/rcf whatsapp1.png")) {
             template = ImageIO.read(in);
         }
 
@@ -186,8 +191,8 @@ public class WhatsAppPassImageIntegrationTest {
 
         double scaleX = (double) img.getWidth() / 1080.0;
         double scaleY = (double) img.getHeight() / 1350.0;
-        int qrCenterX = (int) Math.round(765 * scaleX);
-        int qrCenterY = (int) Math.round(789 * scaleY);
+        int qrCenterX = (int) Math.round(762 * scaleX);
+        int qrCenterY = (int) Math.round(734 * scaleY);
         int centerRgb = img.getRGB(qrCenterX, qrCenterY);
         int r = (centerRgb >> 16) & 0xFF;
         int g = (centerRgb >> 8) & 0xFF;
@@ -204,7 +209,7 @@ public class WhatsAppPassImageIntegrationTest {
 
         BufferedImage generatedImg = ImageIO.read(new ByteArrayInputStream(waImage));
         BufferedImage originalTemplate;
-        try (InputStream in = getClass().getResourceAsStream("/passes/rcf wa.png")) {
+        try (InputStream in = getClass().getResourceAsStream("/passes/rcf whatsapp1.png")) {
             originalTemplate = ImageIO.read(in);
         }
 
@@ -237,7 +242,7 @@ public class WhatsAppPassImageIntegrationTest {
         assertThat(frontImg.getHeight()).isEqualTo(1372);
 
         BufferedImage template;
-        try (InputStream in = getClass().getResourceAsStream("/passes/rcf wa.png")) {
+        try (InputStream in = getClass().getResourceAsStream("/passes/rcf whatsapp1.png")) {
             template = ImageIO.read(in);
         }
 
@@ -317,7 +322,7 @@ public class WhatsAppPassImageIntegrationTest {
         assertThat(waImage).isNotNull().isNotEmpty();
 
         BufferedImage template;
-        try (InputStream in = getClass().getResourceAsStream("/passes/rcf wa.png")) {
+        try (InputStream in = getClass().getResourceAsStream("/passes/rcf whatsapp1.png")) {
             template = ImageIO.read(in);
         }
 
@@ -365,5 +370,67 @@ public class WhatsAppPassImageIntegrationTest {
         byte[] regenerated = passImageService.getOrGenerateWhatsAppPassImage(pass.getId(), true);
         assertThat(regenerated).isNotNull().isNotEmpty();
         assertThat(regenerated.length).isEqualTo(firstCall.length);
+    }
+
+    @Test
+    @DisplayName("10. WhatsApp pass image renders sequence number in Strip 1 and attendee name in Strip 2")
+    void testSequenceNumberAndAttendeeNameRenderedInStrips() throws Exception {
+        EventPass pass = generatePass("STUDENT");
+        Attendee attendee = new Attendee();
+        attendee.setFullName("Rahul Sharma");
+        attendee.setMobileNumber("+919876543210");
+        attendee.setEmail("rahul@example.com");
+        attendee.setEvent(testEvent);
+        attendee.setRegisteredAt(Instant.now());
+        attendee = attendeeRepository.save(attendee);
+
+        pass.setAttendee(attendee);
+        pass.setStatus(PassStatus.ACTIVATED);
+        pass = passRepository.save(pass);
+
+        byte[] waImage = passImageService.getOrGenerateWhatsAppPassImage(pass.getId(), true);
+        assertThat(waImage).isNotNull().isNotEmpty();
+
+        BufferedImage img = ImageIO.read(new ByteArrayInputStream(waImage));
+        assertThat(img.getWidth()).isEqualTo(1080);
+        assertThat(img.getHeight()).isEqualTo(1350);
+
+        // QR decodes correctly
+        String decoded = decodeQrFromImage(waImage);
+        assertThat(decoded).contains(pass.getPassNumber());
+
+        // Check Strip 1 (Sequence #0001) has dark pixels rendered in cream strip
+        boolean foundDarkPixelInStrip1 = false;
+        for (int y = 880; y <= 920; y++) {
+            for (int x = 650; x <= 870; x++) {
+                int rgb = img.getRGB(x, y);
+                int r = (rgb >> 16) & 0xFF;
+                int g = (rgb >> 8) & 0xFF;
+                int b = rgb & 0xFF;
+                if (r < 50 && g < 50 && b < 50) {
+                    foundDarkPixelInStrip1 = true;
+                    break;
+                }
+            }
+            if (foundDarkPixelInStrip1) break;
+        }
+        assertThat(foundDarkPixelInStrip1).isTrue();
+
+        // Check Strip 2 (Attendee Name: RAHUL SHARMA) has dark pixels rendered in cream strip
+        boolean foundDarkPixelInStrip2 = false;
+        for (int y = 940; y <= 975; y++) {
+            for (int x = 650; x <= 870; x++) {
+                int rgb = img.getRGB(x, y);
+                int r = (rgb >> 16) & 0xFF;
+                int g = (rgb >> 8) & 0xFF;
+                int b = rgb & 0xFF;
+                if (r < 50 && g < 50 && b < 50) {
+                    foundDarkPixelInStrip2 = true;
+                    break;
+                }
+            }
+            if (foundDarkPixelInStrip2) break;
+        }
+        assertThat(foundDarkPixelInStrip2).isTrue();
     }
 }

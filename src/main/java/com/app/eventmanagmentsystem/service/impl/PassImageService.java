@@ -155,6 +155,17 @@ public class PassImageService {
         return null;
     }
 
+    public void invalidateWhatsAppPassImage(UUID passId) {
+        if (passId == null) return;
+        try {
+            Path file = getWhatsAppPassImagePath(passId);
+            Files.deleteIfExists(file);
+            log.info("Invalidated WhatsApp pass image cache for pass {}", passId);
+        } catch (Exception e) {
+            log.warn("Could not invalidate WhatsApp pass image for pass {}: {}", passId, e.getMessage());
+        }
+    }
+
     public String saveWhatsAppPassImage(UUID passId, byte[] imageBytes) {
         Path target = getWhatsAppPassImagePath(passId);
         Path tempTarget = target.resolveSibling(target.getFileName().toString() + ".tmp." + UUID.randomUUID());
@@ -622,14 +633,24 @@ public class PassImageService {
         }
         try {
             BufferedImage templateImg = null;
-            try (InputStream in = getClass().getResourceAsStream("/passes/rcf wa.png")) {
+            // Primary WhatsApp artwork: rcf whatsapp1.png (with QR, sequence strip, and attendee name strip)
+            try (InputStream in = getClass().getResourceAsStream("/passes/rcf whatsapp1.png")) {
                 if (in != null) {
                     templateImg = ImageIO.read(in);
                 }
             }
 
+            // Fallback to rcf wa.png if primary is unavailable
             if (templateImg == null) {
-                log.warn("WhatsApp pass background template (/passes/rcf wa.png) not found on classpath, falling back to frontend pass image.");
+                try (InputStream in = getClass().getResourceAsStream("/passes/rcf wa.png")) {
+                    if (in != null) {
+                        templateImg = ImageIO.read(in);
+                    }
+                }
+            }
+
+            if (templateImg == null) {
+                log.warn("WhatsApp pass background template (/passes/rcf whatsapp1.png) not found on classpath, falling back to frontend pass image.");
                 return generateAndSavePassImage(snapshot);
             }
 
@@ -642,21 +663,22 @@ public class PassImageService {
             g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
             g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
             // 1. Draw original background artwork completely untouched
             g2d.drawImage(templateImg, 0, 0, null);
 
-            // 2. Designated blank square coordinates: dynamically scaled relative to 1080x1350 baseline
+            // 2. Designated coordinates scaled relative to 1080x1350 baseline
             double scaleX = (double) width / 1080.0;
             double scaleY = (double) height / 1350.0;
 
-            int boxX = (int) Math.round(629 * scaleX);
-            int boxY = (int) Math.round(653 * scaleY);
-            int boxW = (int) Math.round(274 * scaleX);
-            int boxH = (int) Math.round(274 * scaleY);
-            int cornerRadius = (int) Math.round(32 * scaleX);
+            int boxX = (int) Math.round(625 * scaleX);
+            int boxY = (int) Math.round(598 * scaleY);
+            int boxW = (int) Math.round(273 * scaleX);
+            int boxH = (int) Math.round(272 * scaleY);
+            int cornerRadius = (int) Math.round(24 * scaleX);
 
-            // Render high-contrast solid white rounded backing inside the designated box
+            // Render high-contrast solid white rounded backing inside the designated QR box
             g2d.setColor(Color.WHITE);
             g2d.fill(new RoundRectangle2D.Float(boxX, boxY, boxW, boxH, cornerRadius, cornerRadius));
 
@@ -664,28 +686,93 @@ public class PassImageService {
             boolean isNoQr = snapshot.isNoQr();
             if (isNoQr) {
                 g2d.setColor(new Color(0x92, 0x40, 0x0e));
-                g2d.setFont(new Font("SansSerif", Font.BOLD, (int) Math.round(32 * scaleX)));
+                g2d.setFont(new Font("SansSerif", Font.BOLD, (int) Math.round(30 * scaleX)));
                 FontMetrics fm = g2d.getFontMetrics();
                 String text1 = "WALK-IN";
-                g2d.drawString(text1, boxX + (boxW - fm.stringWidth(text1)) / 2, boxY + (boxH / 2) - (int) Math.round(10 * scaleY));
+                g2d.drawString(text1, boxX + (boxW - fm.stringWidth(text1)) / 2, boxY + (boxH / 2) - (int) Math.round(8 * scaleY));
 
                 g2d.setColor(new Color(0xb4, 0x53, 0x09));
                 g2d.setFont(new Font("SansSerif", Font.BOLD, (int) Math.round(22 * scaleX)));
                 fm = g2d.getFontMetrics();
                 String text2 = "NO QR";
-                g2d.drawString(text2, boxX + (boxW - fm.stringWidth(text2)) / 2, boxY + (boxH / 2) + (int) Math.round(26 * scaleY));
+                g2d.drawString(text2, boxX + (boxW - fm.stringWidth(text2)) / 2, boxY + (boxH / 2) + (int) Math.round(24 * scaleY));
             } else {
                 String identifier = snapshot.getPassNumber() != null ? snapshot.getPassNumber() : snapshot.getPassId().toString();
                 String qrData = buildActivationUrl(identifier);
 
                 // High contrast QR code centered in the box with proportional padding
-                int qrSize = (int) Math.round(246 * scaleX);
+                int qrSize = (int) Math.round(244 * scaleX);
                 BufferedImage qrImage = generateQrCodeImage(qrData, qrSize, qrSize);
                 if (qrImage != null) {
                     int qrX = boxX + (boxW - qrSize) / 2;
                     int qrY = boxY + (boxH - qrSize) / 2;
                     g2d.drawImage(qrImage, qrX, qrY, null);
                 }
+            }
+
+            // 4. Strip 1 (Below QR): Last sequence on pass (e.g. #0001, #0501)
+            int strip1X = (int) Math.round(625 * scaleX);
+            int strip1Y = (int) Math.round(876 * scaleY);
+            int strip1W = (int) Math.round(273 * scaleX);
+            int strip1H = (int) Math.round(50 * scaleY);
+
+            String seqText;
+            if (snapshot.getPassNumber() != null && snapshot.getPassNumber().contains("-")) {
+                String[] parts = snapshot.getPassNumber().split("-");
+                String lastPart = parts[parts.length - 1].trim();
+                seqText = lastPart.startsWith("#") ? lastPart : "#" + lastPart;
+            } else if (snapshot.getSequenceNumber() != null) {
+                seqText = String.format("#%04d", snapshot.getSequenceNumber());
+            } else if (snapshot.getPassNumber() != null && !snapshot.getPassNumber().isBlank()) {
+                String trimmed = snapshot.getPassNumber().trim();
+                seqText = trimmed.startsWith("#") ? trimmed : "#" + trimmed;
+            } else {
+                seqText = "#0001";
+            }
+
+            g2d.setColor(new Color(0x12, 0x12, 0x12));
+            int seqFontSize = (int) Math.round(24 * scaleX);
+            g2d.setFont(new Font("SansSerif", Font.BOLD, seqFontSize));
+            FontMetrics fmSeq = g2d.getFontMetrics();
+            int seqTextX = strip1X + (strip1W - fmSeq.stringWidth(seqText)) / 2;
+            int seqTextY = strip1Y + ((strip1H - fmSeq.getHeight()) / 2) + fmSeq.getAscent();
+            g2d.drawString(seqText, seqTextX, seqTextY);
+
+            // 5. Strip 2 (Below Sequence): Name of attendee who activated the pass
+            int strip2X = (int) Math.round(625 * scaleX);
+            int strip2Y = (int) Math.round(933 * scaleY);
+            int strip2W = (int) Math.round(273 * scaleX);
+            int strip2H = (int) Math.round(50 * scaleY);
+
+            String attendeeName = snapshot.getAttendeeName();
+            if (attendeeName != null && !attendeeName.trim().isBlank()) {
+                String displayName = attendeeName.trim().toUpperCase();
+
+                // Auto-scale font size so attendee name fits gracefully inside the strip
+                int maxTextWidth = strip2W - (int) Math.round(16 * scaleX);
+                int nameFontSize = (int) Math.round(20 * scaleX);
+                Font nameFont = new Font("SansSerif", Font.BOLD, nameFontSize);
+                FontMetrics fmName = g2d.getFontMetrics(nameFont);
+
+                while (fmName.stringWidth(displayName) > maxTextWidth && nameFontSize > (int) Math.round(11 * scaleX)) {
+                    nameFontSize--;
+                    nameFont = new Font("SansSerif", Font.BOLD, nameFontSize);
+                    fmName = g2d.getFontMetrics(nameFont);
+                }
+
+                // If still too long at minimum font size, truncate with ellipsis
+                if (fmName.stringWidth(displayName) > maxTextWidth) {
+                    while (displayName.length() > 3 && fmName.stringWidth(displayName + "...") > maxTextWidth) {
+                        displayName = displayName.substring(0, displayName.length() - 1).trim();
+                    }
+                    displayName += "...";
+                }
+
+                g2d.setFont(nameFont);
+                g2d.setColor(new Color(0x12, 0x12, 0x12));
+                int nameTextX = strip2X + (strip2W - fmName.stringWidth(displayName)) / 2;
+                int nameTextY = strip2Y + ((strip2H - fmName.getHeight()) / 2) + fmName.getAscent();
+                g2d.drawString(displayName, nameTextX, nameTextY);
             }
 
             g2d.dispose();

@@ -464,8 +464,8 @@ public class WhatsAppOutboxProcessor {
                 throw new IllegalStateException("Invalid pass reference ID: " + item.getReferenceId());
             }
 
-            // Ensure the attendee-specific WhatsApp pass image is generated and saved on disk
-            byte[] generatedImageBytes = passImageService.getOrGenerateWhatsAppPassImage(passUuid);
+            // Ensure the attendee-specific WhatsApp pass image is generated and saved on disk (forced refresh with activated attendee details)
+            byte[] generatedImageBytes = passImageService.getOrGenerateWhatsAppPassImage(passUuid, true);
             if (generatedImageBytes == null || generatedImageBytes.length == 0) {
                 log.error("WhatsApp pass image generation produced empty/null payload for pass ID [{}], outbox item [{}] - aborting dispatch",
                         passUuid, item.getId());

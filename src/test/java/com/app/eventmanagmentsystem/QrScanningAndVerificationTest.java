@@ -240,12 +240,12 @@ class QrScanningAndVerificationTest {
                 PassResponse activated = passActivationService.activatePass(actReq);
                 assertThat(activated.getStatus()).isEqualTo(PassStatus.ACTIVATED);
 
-                // 4. Repeated validation shows already activated (attendee info hidden for
-                // public privacy)
+                // 4. Repeated validation shows already activated and displays the attendee who activated it
                 ValidatePassResponse secondValidate = passActivationService.validatePass(passNumber);
                 assertThat(secondValidate.isValid()).isTrue();
                 assertThat(secondValidate.isEligibleForActivation()).isFalse();
                 assertThat(secondValidate.getMessage()).contains("already been activated");
+                assertThat(secondValidate.getAttendeeName()).isEqualTo("Bob Wilson");
         }
 
         @Test

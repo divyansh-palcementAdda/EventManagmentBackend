@@ -147,7 +147,7 @@ public class PassActivationService {
                 .validDays(validDays)
                 .isEligibleForActivation(eligible)
                 .message(message)
-                .attendeeName(pass.getStatus() == PassStatus.ACTIVATED ? null : attendeeName)
+                .attendeeName(attendeeName)
                 .attendeeEmail(pass.getStatus() == PassStatus.ACTIVATED ? null : attendeeEmail)
                 .build();
     }
