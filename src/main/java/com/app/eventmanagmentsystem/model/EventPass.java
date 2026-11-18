@@ -141,5 +141,12 @@ public class EventPass extends BaseEntity {
     /** Idempotency key — prevents duplicate pass generation on client retry. */
     @Column(name = "idempotency_key", unique = true, length = 100)
     private String idempotencyKey;
+
+    @PrePersist
+    public void onPrePersist() {
+        if (this.generatedAt == null) {
+            this.generatedAt = Instant.now();
+        }
+    }
 }
 
