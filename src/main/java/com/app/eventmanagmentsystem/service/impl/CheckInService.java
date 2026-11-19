@@ -7,6 +7,7 @@ import com.app.eventmanagmentsystem.model.enums.CheckInPolicy;
 import com.app.eventmanagmentsystem.model.enums.PassStatus;
 import com.app.eventmanagmentsystem.payload.checkin.CheckInRequest;
 import com.app.eventmanagmentsystem.payload.checkin.CheckInResponse;
+import com.app.eventmanagmentsystem.payload.checkin.CheckInStatsResponse;
 import com.app.eventmanagmentsystem.payload.checkin.CheckInVerificationResponse;
 import com.app.eventmanagmentsystem.payload.event.EventDayResponse;
 import com.app.eventmanagmentsystem.repository.*;
@@ -164,6 +165,9 @@ public class CheckInService {
                     .alreadyCheckedIn(true)
                     .checkedInAt(ci.getCheckedInAt())
                     .checkedInByName(ci.getCheckedInByName())
+                    .goodiesProvided(ci.isGoodiesProvided())
+                    .goodiesProvidedAt(ci.getGoodiesProvidedAt())
+                    .goodiesProvidedByName(ci.getGoodiesProvidedByName())
                     .message("Pass has already been checked in for " + eventDay.getLabel() + ".")
                     .build();
         }
@@ -174,6 +178,7 @@ public class CheckInService {
                 .eligibleForCheckIn(true)
                 .status("READY_FOR_CHECKIN")
                 .alreadyCheckedIn(false)
+                .goodiesProvided(false)
                 .message("Pass is valid and ready for check-in.")
                 .build();
     }
@@ -236,14 +241,83 @@ public class CheckInService {
         checkIn.setCheckedInAt(now);
         checkIn.setRequestId(request.getRequestId());
 
+        // Process Goodies Provided toggle
+        boolean goodies = Boolean.TRUE.equals(request.getGoodiesProvided());
+        checkIn.setGoodiesProvided(goodies);
+        if (goodies) {
+            checkIn.setGoodiesProvidedAt(now);
+            checkIn.setGoodiesProvidedById(actor.getUserId().toString());
+            checkIn.setGoodiesProvidedByName(actor.getFullName());
+        } else {
+            checkIn.setGoodiesProvidedAt(null);
+            checkIn.setGoodiesProvidedById(null);
+            checkIn.setGoodiesProvidedByName(null);
+        }
+
         CheckIn saved = checkInRepository.save(checkIn);
 
         auditLogService.log("CHECKIN", "CheckIn", saved.getId().toString(),
                 pass.getEvent().getId().toString(), AuditOutcome.SUCCESS,
                 request.getRequestId(),
-                "Pass checked in: " + pass.getPassNumber() + " for " + eventDay.getLabel());
+                "Pass checked in: " + pass.getPassNumber() + " for " + eventDay.getLabel()
+                        + (saved.isGoodiesProvided() ? " (Goodies Provided)" : " (No Goodies)"));
 
         return toCheckInResponse(saved, pass, attendee, eventDay, actor);
+    }
+
+    @PreAuthorize("hasAuthority('CHECKIN_SCAN')")
+    @Transactional
+    public CheckInResponse updateGoodiesStatus(UUID checkInId, boolean goodiesProvided) {
+        AppUserDetails actor = currentUser();
+        CheckIn checkIn = checkInRepository.findById(checkInId)
+                .orElseThrow(() -> new ResourceNotFoundException("CheckIn", checkInId.toString()));
+        validateCheckInAccess(checkIn.getEvent().getId(), actor);
+
+        checkIn.setGoodiesProvided(goodiesProvided);
+        if (goodiesProvided) {
+            checkIn.setGoodiesProvidedAt(Instant.now());
+            checkIn.setGoodiesProvidedById(actor.getUserId().toString());
+            checkIn.setGoodiesProvidedByName(actor.getFullName());
+        } else {
+            checkIn.setGoodiesProvidedAt(null);
+            checkIn.setGoodiesProvidedById(null);
+            checkIn.setGoodiesProvidedByName(null);
+        }
+        CheckIn saved = checkInRepository.save(checkIn);
+
+        auditLogService.log("CHECKIN_GOODIES_UPDATE", "CheckIn", saved.getId().toString(),
+                saved.getEvent().getId().toString(), AuditOutcome.SUCCESS, null,
+                "Updated goodies status to " + (goodiesProvided ? "PROVIDED" : "NOT_PROVIDED") + " for pass " + saved.getPass().getPassNumber());
+
+        return toCheckInResponse(saved, saved.getPass(), saved.getAttendee(), saved.getEventDay(), actor);
+    }
+
+    @PreAuthorize("hasAuthority('CHECKIN_SCAN') or hasAuthority('PASS_VIEW')")
+    @Transactional(readOnly = true)
+    public CheckInStatsResponse getCheckInStats(UUID eventId, UUID eventDayId) {
+        AppUserDetails actor = currentUser();
+        validateCheckInAccess(eventId, actor);
+
+        long totalCheckedIn;
+        long goodiesProvided;
+
+        if (eventDayId != null) {
+            totalCheckedIn = checkInRepository.countByEventIdAndEventDayId(eventId, eventDayId);
+            goodiesProvided = checkInRepository.countGoodiesProvidedByEventIdAndEventDayId(eventId, eventDayId);
+        } else {
+            totalCheckedIn = checkInRepository.countByEventId(eventId);
+            goodiesProvided = checkInRepository.countGoodiesProvidedByEventId(eventId);
+        }
+
+        long goodiesNotProvided = Math.max(0, totalCheckedIn - goodiesProvided);
+
+        return CheckInStatsResponse.builder()
+                .eventId(eventId)
+                .eventDayId(eventDayId)
+                .totalCheckedIn(totalCheckedIn)
+                .goodiesProvided(goodiesProvided)
+                .goodiesNotProvided(goodiesNotProvided)
+                .build();
     }
 
     private CheckInResponse toCheckInResponse(CheckIn saved, EventPass pass, Attendee attendee, EventDay eventDay, AppUserDetails actor) {
@@ -263,6 +337,10 @@ public class CheckInService {
                 .eventDayLabel(eventDay.getLabel())
                 .checkedInAt(saved.getCheckedInAt())
                 .checkedInByName(saved.getCheckedInByName() != null ? saved.getCheckedInByName() : actor.getFullName())
+                .goodiesProvided(saved.isGoodiesProvided())
+                .goodiesProvidedAt(saved.getGoodiesProvidedAt())
+                .goodiesProvidedById(saved.getGoodiesProvidedById())
+                .goodiesProvidedByName(saved.getGoodiesProvidedByName() != null ? saved.getGoodiesProvidedByName() : (saved.isGoodiesProvided() ? actor.getFullName() : null))
                 .build();
     }
 

@@ -3,6 +3,7 @@ package com.app.eventmanagmentsystem.controller;
 import com.app.eventmanagmentsystem.payload.ApiResponse;
 import com.app.eventmanagmentsystem.payload.checkin.CheckInRequest;
 import com.app.eventmanagmentsystem.payload.checkin.CheckInResponse;
+import com.app.eventmanagmentsystem.payload.checkin.CheckInStatsResponse;
 import com.app.eventmanagmentsystem.payload.checkin.CheckInVerificationResponse;
 import com.app.eventmanagmentsystem.service.impl.CheckInService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,6 +14,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
 
 @Tag(name = "Check-In", description = "Endpoints for gatekeeper check-in scan and event entry verification")
 @RestController
@@ -50,5 +53,29 @@ public class CheckInController {
         CheckInResponse response = checkInService.performCheckIn(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Check-in successful", response));
+    }
+
+    @Operation(
+            summary = "Get check-in and goodies distribution stats",
+            description = "Retrieves total checked-in attendees, goodies provided, and goodies not provided counts for an event."
+    )
+    @GetMapping("/stats")
+    public ResponseEntity<ApiResponse<CheckInStatsResponse>> getStats(
+            @RequestParam UUID eventId,
+            @RequestParam(required = false) UUID eventDayId) {
+        CheckInStatsResponse response = checkInService.getCheckInStats(eventId, eventDayId);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @Operation(
+            summary = "Update goodies distribution status for check-in record",
+            description = "Authorized correction of goodies status for a specific check-in record. Requires CHECKIN_SCAN permission."
+    )
+    @PatchMapping("/{checkInId}/goodies")
+    public ResponseEntity<ApiResponse<CheckInResponse>> updateGoodies(
+            @PathVariable UUID checkInId,
+            @RequestParam boolean goodiesProvided) {
+        CheckInResponse response = checkInService.updateGoodiesStatus(checkInId, goodiesProvided);
+        return ResponseEntity.ok(ApiResponse.success("Goodies status updated successfully", response));
     }
 }

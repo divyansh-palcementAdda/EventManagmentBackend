@@ -33,6 +33,9 @@ public class CheckInVerificationResponse {
     private final boolean alreadyCheckedIn;
     private final Instant checkedInAt;
     private final String checkedInByName;
+    private final Boolean goodiesProvided;
+    private final Instant goodiesProvidedAt;
+    private final String goodiesProvidedByName;
     private final List<EventDayResponse> validDays;
 }
 

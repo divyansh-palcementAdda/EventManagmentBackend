@@ -44,4 +44,24 @@ public interface CheckInRepository extends JpaRepository<CheckIn, UUID> {
 
     @Query("SELECT c FROM CheckIn c WHERE c.pass.id IN :passIds ORDER BY c.checkedInAt DESC")
     List<CheckIn> findByPassIdIn(@Param("passIds") Collection<UUID> passIds);
+
+    @Query("SELECT COUNT(c) FROM CheckIn c WHERE c.event.id = :eventId AND c.goodiesProvided = true")
+    long countGoodiesProvidedByEventId(@Param("eventId") UUID eventId);
+
+    @Query("SELECT COUNT(c) FROM CheckIn c WHERE c.event.id = :eventId AND c.goodiesProvided = false")
+    long countGoodiesNotProvidedByEventId(@Param("eventId") UUID eventId);
+
+    @Query("SELECT COUNT(c) FROM CheckIn c WHERE c.event.id = :eventId AND c.eventDay.id = :eventDayId AND c.goodiesProvided = true")
+    long countGoodiesProvidedByEventIdAndEventDayId(@Param("eventId") UUID eventId, @Param("eventDayId") UUID eventDayId);
+
+    @Query("SELECT COUNT(c) FROM CheckIn c WHERE c.event.id = :eventId AND c.eventDay.id = :eventDayId AND c.goodiesProvided = false")
+    long countGoodiesNotProvidedByEventIdAndEventDayId(@Param("eventId") UUID eventId, @Param("eventDayId") UUID eventDayId);
+
+    @Query("SELECT DISTINCT c.pass.id FROM CheckIn c WHERE c.event.id = :eventId AND c.goodiesProvided = true")
+    Set<UUID> findGoodiesProvidedPassIdsByEventId(@Param("eventId") UUID eventId);
+
+    @Query("SELECT DISTINCT c.pass.id FROM CheckIn c WHERE c.event.id = :eventId AND c.goodiesProvided = false")
+    Set<UUID> findGoodiesNotProvidedPassIdsByEventId(@Param("eventId") UUID eventId);
+
+    Page<CheckIn> findByEventIdAndGoodiesProvided(UUID eventId, boolean goodiesProvided, Pageable pageable);
 }

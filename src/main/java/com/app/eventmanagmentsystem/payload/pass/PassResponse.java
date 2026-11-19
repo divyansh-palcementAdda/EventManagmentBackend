@@ -45,6 +45,9 @@ public class PassResponse {
     private boolean checkedIn;
     private Long checkInCount;
     private Instant lastCheckedInAt;
+    private boolean goodiesProvided;
+    private Instant goodiesProvidedAt;
+    private String goodiesProvidedByName;
     private List<EventDayResponse> validDays;
 
     /**

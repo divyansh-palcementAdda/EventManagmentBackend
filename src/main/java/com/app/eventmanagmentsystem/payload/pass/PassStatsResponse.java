@@ -20,6 +20,8 @@ public class PassStatsResponse {
     private final long availablePasses;
     private final long revokedPasses;
     private final long checkedInCount;
+    private final long goodiesProvidedCount;
+    private final long goodiesNotProvidedCount;
     private final Map<String, CategoryStats> categoryStats;
 
     @Getter

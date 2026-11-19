@@ -33,6 +33,18 @@ public class AttendeeSpecification {
             String checkInStatus,
             Collection<UUID> checkedInAttendeeIds,
             Boolean hasPass) {
+        return filterAttendees(eventId, search, status, checkInStatus, checkedInAttendeeIds, hasPass, null, null);
+    }
+
+    public static Specification<Attendee> filterAttendees(
+            UUID eventId,
+            String search,
+            RegistrationStatus status,
+            String checkInStatus,
+            Collection<UUID> checkedInAttendeeIds,
+            Boolean hasPass,
+            String goodiesStatus,
+            Collection<UUID> goodiesAttendeeIds) {
 
         return (Root<Attendee> root, CriteriaQuery<?> query, CriteriaBuilder cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -64,6 +76,14 @@ public class AttendeeSpecification {
             } else if ("NOT_CHECKED_IN".equalsIgnoreCase(checkInStatus)) {
                 if (checkedInAttendeeIds != null && !checkedInAttendeeIds.isEmpty()) {
                     predicates.add(cb.not(root.get("id").in(checkedInAttendeeIds)));
+                }
+            }
+
+            if ("PROVIDED".equalsIgnoreCase(goodiesStatus) || "NOT_PROVIDED".equalsIgnoreCase(goodiesStatus)) {
+                if (goodiesAttendeeIds == null || goodiesAttendeeIds.isEmpty()) {
+                    predicates.add(cb.disjunction());
+                } else {
+                    predicates.add(root.get("id").in(goodiesAttendeeIds));
                 }
             }
 

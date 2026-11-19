@@ -209,6 +209,9 @@ public class BulkPassService {
             }
         }
 
+        long goodiesProvided = checkInRepository.countGoodiesProvidedByEventId(eventId);
+        long goodiesNotProvided = Math.max(0, checkedIn - goodiesProvided);
+
         return PassStatsResponse.builder()
                 .eventId(event.getId())
                 .eventCode(event.getEventCode())
@@ -218,6 +221,8 @@ public class BulkPassService {
                 .availablePasses(available)
                 .revokedPasses(revoked)
                 .checkedInCount(checkedIn)
+                .goodiesProvidedCount(goodiesProvided)
+                .goodiesNotProvidedCount(goodiesNotProvided)
                 .categoryStats(categoryStats)
                 .build();
     }

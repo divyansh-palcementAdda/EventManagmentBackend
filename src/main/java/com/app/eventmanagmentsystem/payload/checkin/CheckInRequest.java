@@ -22,5 +22,11 @@ public class CheckInRequest {
 
     /** Optional client request ID for idempotency tracking. */
     private String requestId;
+
+    /**
+     * Optional indicator whether attendee goodies / event kit was distributed at check-in.
+     * Defaults to false if omitted or null.
+     */
+    private Boolean goodiesProvided = false;
 }
 

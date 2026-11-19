@@ -418,6 +418,13 @@ public class PassGenerationService {
         boolean isCheckedIn = checkIns != null && !checkIns.isEmpty();
         long count = checkIns != null ? checkIns.size() : 0L;
         Instant lastCheckIn = isCheckedIn ? checkIns.get(0).getCheckedInAt() : null;
+        boolean goodiesProvided = checkIns != null && checkIns.stream().anyMatch(CheckIn::isGoodiesProvided);
+        Instant goodiesAt = goodiesProvided
+                ? checkIns.stream().filter(CheckIn::isGoodiesProvided).map(CheckIn::getGoodiesProvidedAt).findFirst().orElse(null)
+                : null;
+        String goodiesByName = goodiesProvided
+                ? checkIns.stream().filter(CheckIn::isGoodiesProvided).map(CheckIn::getGoodiesProvidedByName).findFirst().orElse(null)
+                : null;
         String catName = pass.getPassCategory() != null ? pass.getPassCategory().getName() : pass.getCategory();
         var actMode = pass.getEventCategory() != null ? pass.getEventCategory().getActivationMode() : com.app.eventmanagmentsystem.model.enums.ActivationMode.SELF_SERVICE;
         boolean qrReq = true;
@@ -452,6 +459,9 @@ public class PassGenerationService {
                 .checkedIn(isCheckedIn)
                 .checkInCount(count)
                 .lastCheckedInAt(lastCheckIn)
+                .goodiesProvided(goodiesProvided)
+                .goodiesProvidedAt(goodiesAt)
+                .goodiesProvidedByName(goodiesByName)
                 .validDays(mapDays(pass.getValidDays()))
                 .rawToken(null)
                 .build();

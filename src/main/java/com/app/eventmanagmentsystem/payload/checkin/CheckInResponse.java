@@ -24,5 +24,9 @@ public class CheckInResponse {
     private final String eventDayLabel;
     private final Instant checkedInAt;
     private final String checkedInByName;
+    private final boolean goodiesProvided;
+    private final Instant goodiesProvidedAt;
+    private final String goodiesProvidedById;
+    private final String goodiesProvidedByName;
 }
 

@@ -22,7 +22,8 @@ import java.time.Instant;
         @Index(name = "idx_ci_pass_day", columnList = "pass_id, event_day_id", unique = true),
         @Index(name = "idx_ci_event", columnList = "event_id"),
         @Index(name = "idx_ci_attendee", columnList = "attendee_id"),
-        @Index(name = "idx_ci_checked_in_at", columnList = "checked_in_at")
+        @Index(name = "idx_ci_checked_in_at", columnList = "checked_in_at"),
+        @Index(name = "idx_ci_goodies", columnList = "event_id, goodies_provided")
 })
 @Getter
 @Setter
@@ -61,4 +62,28 @@ public class CheckIn extends BaseEntity {
      */
     @Column(name = "request_id", length = 100, updatable = false)
     private String requestId;
+
+    /**
+     * Whether attendee goodies / event kit were distributed during or after check-in.
+     */
+    @Column(name = "goodies_provided", nullable = false)
+    private boolean goodiesProvided = false;
+
+    /**
+     * Timestamp when goodies were provided. Null if goodies not provided.
+     */
+    @Column(name = "goodies_provided_at")
+    private Instant goodiesProvidedAt;
+
+    /**
+     * UUID string of the gatekeeper or authorized user who recorded goodies distribution.
+     */
+    @Column(name = "goodies_provided_by_id", length = 36)
+    private String goodiesProvidedById;
+
+    /**
+     * Full name of the user who recorded goodies distribution.
+     */
+    @Column(name = "goodies_provided_by_name", length = 150)
+    private String goodiesProvidedByName;
 }

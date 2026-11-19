@@ -68,6 +68,19 @@ public class AttendeeService {
             String checkInStatus,
             Boolean hasPass,
             Pageable pageable) {
+        return getAttendees(eventId, search, status, checkInStatus, hasPass, null, pageable);
+    }
+
+    @PreAuthorize("hasAuthority('ATTENDEE_VIEW')")
+    @Transactional(readOnly = true)
+    public Page<AttendeeResponse> getAttendees(
+            UUID eventId,
+            String search,
+            RegistrationStatus status,
+            String checkInStatus,
+            Boolean hasPass,
+            String goodiesStatus,
+            Pageable pageable) {
 
         Pageable safePageable = sanitizePageable(pageable);
 
@@ -88,8 +101,26 @@ public class AttendeeService {
             }
         }
 
+        Set<UUID> goodiesAttendeeIds = null;
+        if ("PROVIDED".equalsIgnoreCase(goodiesStatus) || "NOT_PROVIDED".equalsIgnoreCase(goodiesStatus)) {
+            Set<UUID> targetPassIds = eventId != null
+                    ? ("PROVIDED".equalsIgnoreCase(goodiesStatus)
+                            ? checkInRepository.findGoodiesProvidedPassIdsByEventId(eventId)
+                            : checkInRepository.findGoodiesNotProvidedPassIdsByEventId(eventId))
+                    : Collections.emptySet();
+
+            if (!targetPassIds.isEmpty()) {
+                goodiesAttendeeIds = passRepository.findAllById(targetPassIds).stream()
+                        .map(p -> p.getAttendee() != null ? p.getAttendee().getId() : null)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toSet());
+            } else {
+                goodiesAttendeeIds = Collections.emptySet();
+            }
+        }
+
         Specification<Attendee> spec = AttendeeSpecification.filterAttendees(
-                eventId, search, status, checkInStatus, checkedInAttendeeIds, hasPass);
+                eventId, search, status, checkInStatus, checkedInAttendeeIds, hasPass, goodiesStatus, goodiesAttendeeIds);
 
         Page<Attendee> attendeesPage = attendeeRepository.findAll(spec, safePageable);
 
@@ -290,6 +321,14 @@ public class AttendeeService {
                 .max(Instant::compareTo)
                 .orElse(null);
 
+        boolean goodiesProvided = checkIns.stream().anyMatch(CheckIn::isGoodiesProvided);
+        Instant goodiesProvidedAt = goodiesProvided
+                ? checkIns.stream().filter(CheckIn::isGoodiesProvided).map(CheckIn::getGoodiesProvidedAt).findFirst().orElse(null)
+                : null;
+        String goodiesProvidedByName = goodiesProvided
+                ? checkIns.stream().filter(CheckIn::isGoodiesProvided).map(CheckIn::getGoodiesProvidedByName).findFirst().orElse(null)
+                : null;
+
         List<AttendeeResponse.CheckInSummary> checkInSummaries = checkIns.stream()
                 .map(ci -> AttendeeResponse.CheckInSummary.builder()
                         .id(ci.getId())
@@ -297,6 +336,9 @@ public class AttendeeService {
                         .operatorName(ci.getCheckedInByName())
                         .checkedInAt(ci.getCheckedInAt())
                         .dayNumber(ci.getEventDay() != null ? ci.getEventDay().getDayNumber() : null)
+                        .goodiesProvided(ci.isGoodiesProvided())
+                        .goodiesProvidedAt(ci.getGoodiesProvidedAt())
+                        .goodiesProvidedByName(ci.getGoodiesProvidedByName())
                         .build())
                 .collect(Collectors.toList());
 
@@ -345,6 +387,9 @@ public class AttendeeService {
                 .checkInCount(checkInCount)
                 .lastCheckedInAt(lastCheckedIn)
                 .checkedInAt(lastCheckedIn)
+                .goodiesProvided(goodiesProvided)
+                .goodiesProvidedAt(goodiesProvidedAt)
+                .goodiesProvidedByName(goodiesProvidedByName)
                 .event(eventSummary)
                 .linkedPass(passSummary)
                 .checkInHistory(checkInSummaries)

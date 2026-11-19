@@ -48,6 +48,9 @@ public class AttendeeResponse {
     private int checkInCount;
     private Instant lastCheckedInAt;
     private Instant checkedInAt;
+    private boolean goodiesProvided;
+    private Instant goodiesProvidedAt;
+    private String goodiesProvidedByName;
 
     // Nested structures for rich client consumption
     private EventSummary event;
@@ -125,5 +128,8 @@ public class AttendeeResponse {
         private String operatorName;
         private Instant checkedInAt;
         private Integer dayNumber;
+        private boolean goodiesProvided;
+        private Instant goodiesProvidedAt;
+        private String goodiesProvidedByName;
     }
 }

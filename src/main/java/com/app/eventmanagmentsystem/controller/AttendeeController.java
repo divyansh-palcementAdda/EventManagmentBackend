@@ -38,9 +38,10 @@ public class AttendeeController {
             @Parameter(description = "Filter by registration status") @RequestParam(required = false) RegistrationStatus status,
             @Parameter(description = "Filter by check-in state (CHECKED_IN / NOT_CHECKED_IN)") @RequestParam(required = false) String checkInStatus,
             @Parameter(description = "Filter by pass assignment status") @RequestParam(required = false) Boolean hasPass,
+            @Parameter(description = "Filter by goodies distribution status (ALL / PROVIDED / NOT_PROVIDED)") @RequestParam(required = false) String goodiesStatus,
             @PageableDefault(size = 20, sort = "registeredAt") Pageable pageable) {
 
-        Page<AttendeeResponse> response = attendeeService.getAttendees(eventId, search, status, checkInStatus, hasPass, pageable);
+        Page<AttendeeResponse> response = attendeeService.getAttendees(eventId, search, status, checkInStatus, hasPass, goodiesStatus, pageable);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
